@@ -2,6 +2,9 @@ from fastapi import FastAPI
 
 from app.database.init_db import init_db
 from app.api.machine_routes import router as machine_router
+from app.api.sensor_routes import router as sensor_router
+from app.api.dashboard_routes import router as dashboard_router
+
 
 app = FastAPI(
     title="PackPilot API",
@@ -13,6 +16,8 @@ app = FastAPI(
 def startup():
     init_db()
 app.include_router(machine_router)
+app.include_router(sensor_router)
+app.include_router(dashboard_router)
 
 @app.get("/")
 def root():

@@ -3,6 +3,7 @@ from app.database.base import Base
 
 # Import ONLY existing models
 from app.models.machine import Machine
+from app.models.sensor import Sensor
 
 
 def init_db():
