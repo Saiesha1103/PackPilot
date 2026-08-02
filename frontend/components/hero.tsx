@@ -2,6 +2,7 @@
 
 import { useRef } from "react";
 import Image from "next/image";
+import Link from "next/link";
 import {
   motion,
   useMotionValue,
@@ -13,7 +14,7 @@ import { ArrowRight, GitBranch } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { HeroKpiStack } from "@/components/hero-kpi-stack";
 
-const HEADLINE = "Transform Packaging Lines into Intelligent Manufacturing Systems.";
+const HEADLINE = "PackPilot";
 
 const TECH_BADGES = [
   "Industry 4.0",
@@ -51,7 +52,12 @@ const sequenceContainer = {
 
 const sequenceItem = {
   hidden: { opacity: 0, y: 10, scale: 0.98 },
-  show: { opacity: 1, y: 0, scale: 1, transition: { duration: 0.45, ease: EASE } },
+  show: {
+    opacity: 1,
+    y: 0,
+    scale: 1,
+    transition: { duration: 0.45, ease: EASE },
+  },
 };
 
 // Particles drifting along the digital data lines near the hologram —
@@ -119,7 +125,10 @@ export function Hero() {
           transition={{ duration: 1.3, ease: EASE }}
           className="absolute inset-0 overflow-hidden"
         >
-          <motion.div style={{ y: imageY, scale: imageScale }} className="absolute inset-0">
+          <motion.div
+            style={{ y: imageY, scale: imageScale }}
+            className="absolute inset-0"
+          >
             {/* Fixed-px buffer so the left-shift and mouse parallax below
                 never reveal an edge, regardless of container width. Static. */}
             <div className="absolute -inset-x-[150px] inset-y-0 lg:-inset-x-[190px]">
@@ -128,7 +137,10 @@ export function Hero() {
                   Pure CSS, responsive, independent of the motion layers below. */}
               <div className="absolute inset-0 -translate-x-5 sm:-translate-x-10 md:-translate-x-16 lg:-translate-x-[110px]">
                 {/* Mouse parallax — the photo only, a few px of drift */}
-                <motion.div style={{ x: springX, y: springY }} className="absolute inset-0">
+                <motion.div
+                  style={{ x: springX, y: springY }}
+                  className="absolute inset-0"
+                >
                   {/* Near-imperceptible drift — just enough to read as a
                       running line, never a dramatic pan. The conveyor and
                       machinery themselves stay put; only this whole-photo
@@ -136,7 +148,11 @@ export function Hero() {
                   <motion.div
                     className="absolute inset-0 scale-[1.025]"
                     animate={{ x: [-3, 3, -3] }}
-                    transition={{ duration: 11, repeat: Infinity, ease: "easeInOut" }}
+                    transition={{
+                      duration: 11,
+                      repeat: Infinity,
+                      ease: "easeInOut",
+                    }}
                   >
                     <Image
                       src="/hero-line.png"
@@ -191,7 +207,12 @@ export function Hero() {
               filter: "blur(12px)",
             }}
             animate={{ opacity: [0.3, 0.6, 0.3] }}
-            transition={{ duration: 6, repeat: Infinity, ease: "easeInOut", delay: 0.8 }}
+            transition={{
+              duration: 6,
+              repeat: Infinity,
+              ease: "easeInOut",
+              delay: 0.8,
+            }}
           />
 
           {/* Radiating rings from the digital twin — a soft sonar-like pulse,
@@ -305,7 +326,11 @@ export function Hero() {
             className="font-display text-[2.5rem] font-semibold leading-[1.08] tracking-[-0.02em] text-white sm:text-[3rem] lg:text-[3.35rem]"
           >
             {HEADLINE.split(" ").map((word, i) => (
-              <motion.span key={i} variants={wordVariants} className="mr-[0.28em] inline-block">
+              <motion.span
+                key={i}
+                variants={wordVariants}
+                className="mr-[0.28em] inline-block"
+              >
                 {word}
               </motion.span>
             ))}
@@ -315,9 +340,10 @@ export function Hero() {
             variants={wordVariants}
             className="mt-6 max-w-lg text-[15px] leading-relaxed text-steel-400"
           >
-            PackPilot unifies Industrial IoT telemetry, real-time OEE analytics, PFMEA-driven
-            failure prevention, and continuous condition monitoring into a single engineering
-            decision-support system — built for the pace and precision of FMCG packaging lines.
+            PackPilot unifies Industrial IoT telemetry, real-time OEE analytics,
+            PFMEA-driven failure prevention, and continuous condition monitoring
+            into a single engineering decision-support system — built for the
+            pace and precision of FMCG packaging lines.
           </motion.p>
 
           <motion.div
@@ -332,14 +358,16 @@ export function Hero() {
               whileTap={{ scale: 0.97 }}
               transition={{ type: "spring", stiffness: 400, damping: 22 }}
             >
-              <Button variant="primary" size="lg" className="group">
-                Explore Platform
-                <ArrowRight
-                  size={16}
-                  strokeWidth={2}
-                  className="transition-transform duration-200 group-hover:translate-x-0.5"
-                />
-              </Button>
+              <Link href="/dashboard">
+                <Button variant="primary" size="lg" className="group">
+                  Explore Platform
+                  <ArrowRight
+                    size={16}
+                    strokeWidth={2}
+                    className="transition-transform duration-200 group-hover:translate-x-0.5"
+                  />
+                </Button>
+              </Link>
             </motion.span>
             <motion.span
               variants={sequenceItem}
@@ -364,7 +392,11 @@ export function Hero() {
               <motion.span
                 key={badge}
                 variants={sequenceItem}
-                whileHover={{ y: -2, borderColor: "rgba(63,198,224,0.4)", color: "#fff" }}
+                whileHover={{
+                  y: -2,
+                  borderColor: "rgba(63,198,224,0.4)",
+                  color: "#fff",
+                }}
                 transition={{ duration: 0.2, ease: EASE }}
                 className="cursor-default rounded-md border border-hairline bg-white/[0.03] px-3 py-1.5 font-mono text-[11px] uppercase tracking-[0.06em] text-steel-400"
               >
