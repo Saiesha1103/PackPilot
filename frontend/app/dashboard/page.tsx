@@ -5,7 +5,11 @@ import { Space_Grotesk, Inter, JetBrains_Mono } from "next/font/google";
 import {
   getLatestSensorReading,
   getSensorReadings,
+  calculateOEE,
+  getOEEHistory,
   type SensorReading,
+  type OEEResponse,
+  type OEEHistoryRecord,
 } from "@/lib/api";
 
 const display = Space_Grotesk({
@@ -62,8 +66,6 @@ const kpis = [
     accent: "from-cyan-400 to-teal-300",
   },
 ];
-
-
 
 const alerts = [
   {
@@ -137,18 +139,27 @@ function sensorColor(status: string) {
 export default function DashboardPage() {
   const [tick, setTick] = useState(0);
 
-  const [temperature, setTemperature] =
-    useState<SensorReading | null>(null);
+  const [temperature, setTemperature] = useState<SensorReading | null>(null);
 
-  const [vibration, setVibration] =
-    useState<SensorReading | null>(null);
+  const [vibration, setVibration] = useState<SensorReading | null>(null);
 
-  const [irSensor, setIrSensor] =
-    useState<SensorReading | null>(null);
+  const [irSensor, setIrSensor] = useState<SensorReading | null>(null);
 
-  const [temperatureHistory, setTemperatureHistory] =
-    useState<SensorReading[]>([]);
-
+  const [temperatureHistory, setTemperatureHistory] = useState<SensorReading[]>(
+    [],
+  );
+  const [oeeData, setOeeData] = useState<OEEResponse | null>(null);
+  const [oeeHistory, setOeeHistory] =
+  useState<OEEHistoryRecord[]>([]);
+  const [shiftOEE, setShiftOEE] = useState<{
+    shiftA: OEEResponse | null;
+    shiftB: OEEResponse | null;
+    shiftC: OEEResponse | null;
+  }>({
+    shiftA: null,
+    shiftB: null,
+    shiftC: null,
+  });
 
   // Existing dashboard animation
   useEffect(() => {
@@ -158,7 +169,6 @@ export default function DashboardPage() {
 
     return () => clearInterval(id);
   }, []);
-
 
   // Live sensor values — refresh every 2 seconds
   useEffect(() => {
@@ -185,64 +195,118 @@ export default function DashboardPage() {
     return () => clearInterval(interval);
   }, []);
 
-
   // Temperature history — refresh every 10 seconds
   useEffect(() => {
     async function fetchTemperatureHistory() {
       try {
         const readings = await getSensorReadings(1);
-        setTemperatureHistory(
-          readings
-            .slice(0, 20)
-            .reverse()
-        );
+        setTemperatureHistory(readings.slice(0, 20).reverse());
       } catch (error) {
-        console.error(
-          "Failed to fetch temperature history:",
-          error
-        );
+        console.error("Failed to fetch temperature history:", error);
       }
     }
 
     fetchTemperatureHistory();
 
-    const interval = setInterval(
-      fetchTemperatureHistory,
-      10000
-    );
+    const interval = setInterval(fetchTemperatureHistory, 10000);
 
     return () => clearInterval(interval);
   }, []);
-const parseBackendTimestamp = (timestamp: string) => {
-  const normalizedTimestamp =
-    timestamp.endsWith("Z") || timestamp.includes("+")
-      ? timestamp
-      : `${timestamp}Z`;
+  // Shift OEE comparison — calculated by backend
+ useEffect(() => {
 
-  return new Date(normalizedTimestamp).getTime();
-};
+  async function fetchShiftOEE() {
+      try {
+        const [shiftA, shiftB, shiftC] = await Promise.all([
+          calculateOEE({
+            planned_production_time: 480,
+            run_time: 420,
+            ideal_cycle_time: 0.5,
+            total_units: 760,
+            good_units: 740,
+          }),
 
-const latestTelemetryTimestamp = Math.max(
-  temperature ? parseBackendTimestamp(temperature.timestamp) : 0,
-  vibration ? parseBackendTimestamp(vibration.timestamp) : 0,
-  irSensor ? parseBackendTimestamp(irSensor.timestamp) : 0
-);
+          calculateOEE({
+            planned_production_time: 480,
+            run_time: 400,
+            ideal_cycle_time: 0.5,
+            total_units: 700,
+            good_units: 665,
+          }),
 
-const telemetryAge = latestTelemetryTimestamp
-  ? Date.now() - latestTelemetryTimestamp
-  : Infinity;
+          calculateOEE({
+            planned_production_time: 480,
+            run_time: 440,
+            ideal_cycle_time: 0.5,
+            total_units: 820,
+            good_units: 790,
+          }),
+        ]);
+        setOeeData(shiftA);
 
-const isMachineOnline = telemetryAge < 15000;
-// tick keeps this calculation refreshed
-void tick;
+        setShiftOEE({
+          shiftA,
+          shiftB,
+          shiftC,
+        });
+      } catch (error) {
+        console.error("Failed to calculate shift OEE:", error);
+      }
+    }
 
-const machines = [
-  {
-    name: "Machine 1",
-    zone: "PackPilot IoT Line",
-    status: isMachineOnline ? "running" : "offline",
-  },
-];
+    fetchShiftOEE();
+  }, []);
+  // Historical OEE — fetch latest 20 stored records
+useEffect(() => {
+  async function fetchOEEHistory() {
+    try {
+      const history = await getOEEHistory(20);
+
+      // Backend returns newest first.
+      // Reverse so chart displays oldest → newest.
+      setOeeHistory(
+        history.slice().reverse()
+      );
+    } catch (error) {
+      console.error(
+        "Failed to fetch OEE history:",
+        error
+      );
+    }
+  }
+
+  fetchOEEHistory();
+}, []);
+  const parseBackendTimestamp = (timestamp: string) => {
+    const normalizedTimestamp =
+      timestamp.endsWith("Z") || timestamp.includes("+")
+        ? timestamp
+        : `${timestamp}Z`;
+
+    return new Date(normalizedTimestamp).getTime();
+  };
+
+  const latestTelemetryTimestamp = Math.max(
+    temperature ? parseBackendTimestamp(temperature.timestamp) : 0,
+    vibration ? parseBackendTimestamp(vibration.timestamp) : 0,
+    irSensor ? parseBackendTimestamp(irSensor.timestamp) : 0,
+  );
+
+  const telemetryAge = latestTelemetryTimestamp
+    ? Date.now() - latestTelemetryTimestamp
+    : Infinity;
+
+  const isMachineOnline = telemetryAge < 15000;
+  // tick keeps this calculation refreshed
+  void tick;
+
+  const machines = [
+    {
+      name: "Machine 1",
+      zone: "PackPilot IoT Line",
+      status: isMachineOnline ? "running" : "offline",
+    },
+  ];
 
   const sensorLog = [
     {
@@ -355,7 +419,8 @@ const machines = [
               <h2 className="font-[family-name:var(--font-display)] text-3xl font-semibold leading-[1.1] tracking-[-0.035em] text-slate-100 sm:text-4xl lg:text-[46px]">
                 Meridian Assembly Plant
                 <span className="mt-1 block bg-gradient-to-r from-slate-200 via-sky-200 to-cyan-300 bg-clip-text text-transparent">
-                  is running at 87.4% efficiency
+                  is running at {oeeData ? oeeData.oee.toFixed(1) : "--"}%
+                  efficiency
                 </span>
               </h2>
 
@@ -443,7 +508,9 @@ const machines = [
                   strokeWidth="9"
                   strokeLinecap="round"
                   strokeDasharray="590.62"
-                  strokeDashoffset="74.42"
+                  strokeDashoffset={
+                    oeeData ? 590.62 * (1 - oeeData.oee / 100) : 590.62
+                  }
                   filter="url(#oeeGlow)"
                   className="transition-all duration-1000"
                 />
@@ -457,7 +524,7 @@ const machines = [
 
                 <div className="mt-1 flex items-end">
                   <span className="font-[family-name:var(--font-display)] text-[48px] font-semibold leading-none tracking-[-0.05em] text-slate-100">
-                    87.4
+                    {oeeData ? oeeData.oee.toFixed(1) : "--"}
                   </span>
                   <span className="mb-1.5 ml-1 text-sm font-medium text-sky-300">
                     %
@@ -465,10 +532,15 @@ const machines = [
                 </div>
 
                 <div className="mt-3 flex items-center gap-1.5 rounded-full border border-emerald-400/15 bg-emerald-400/[0.06] px-2.5 py-1">
-                  <span className="text-[10px] text-emerald-300">↑ 2.1%</span>
-                  <span className="text-[9px] text-slate-500">
-                    vs prev shift
+                  <span className="text-[10px] text-emerald-300">
+                    {shiftOEE.shiftA && shiftOEE.shiftB
+                      ? `${shiftOEE.shiftA.oee >= shiftOEE.shiftB.oee ? "↑" : "↓"} ${Math.abs(
+                          shiftOEE.shiftA.oee - shiftOEE.shiftB.oee,
+                        ).toFixed(1)}%`
+                      : "--"}
                   </span>
+
+                  <span className="text-[9px] text-slate-500">vs Shift B</span>
                 </div>
               </div>
 
@@ -524,6 +596,224 @@ const machines = [
             </div>
           </div>
         </section>
+        {/* OEE FACTORS */}
+        <section className="mb-8 grid gap-4 sm:grid-cols-3">
+          {[
+            {
+              label: "Availability",
+              value: oeeData?.availability,
+              description: "Run time / planned production time",
+            },
+            {
+              label: "Performance",
+              value: oeeData?.performance,
+              description: "Actual output vs ideal production rate",
+            },
+            {
+              label: "Quality",
+              value: oeeData?.quality,
+              description: "Good units / total units",
+            },
+          ].map((factor) => (
+            <div
+              key={factor.label}
+              className="relative overflow-hidden rounded-2xl border border-white/[0.07] bg-white/[0.035] p-5 shadow-[0_18px_45px_-24px_rgba(14,165,233,0.25),inset_0_1px_0_rgba(255,255,255,0.07)] backdrop-blur-[24px]"
+            >
+              <div className="pointer-events-none absolute inset-x-6 top-0 h-px bg-gradient-to-r from-transparent via-white/20 to-transparent" />
+
+              <p className="font-[family-name:var(--font-mono)] text-[9px] font-medium uppercase tracking-[0.18em] text-slate-500">
+                {factor.label}
+              </p>
+
+              <div className="mt-3 flex items-end gap-1">
+                <span className="font-[family-name:var(--font-display)] text-[30px] font-semibold leading-none tracking-[-0.04em] text-slate-100">
+                  {factor.value !== undefined ? factor.value.toFixed(1) : "--"}
+                </span>
+
+                <span className="mb-0.5 text-[11px] font-medium text-sky-300">
+                  %
+                </span>
+              </div>
+
+              <div className="mt-4 h-1.5 overflow-hidden rounded-full bg-white/[0.05]">
+                <div
+                  className="h-full rounded-full bg-gradient-to-r from-sky-500 to-cyan-300 transition-all duration-1000"
+                  style={{
+                    width: `${Math.min(factor.value ?? 0, 100)}%`,
+                  }}
+                />
+              </div>
+
+              <p className="mt-3 text-[10px] leading-4 text-slate-600">
+                {factor.description}
+              </p>
+            </div>
+          ))}
+        </section>
+        {/* SHIFT OEE COMPARISON */}
+        <section className="mb-8 rounded-2xl border border-white/[0.07] bg-white/[0.035] p-5 backdrop-blur-[24px]">
+          <div className="mb-5">
+            <p className="font-[family-name:var(--font-mono)] text-[9px] uppercase tracking-[0.18em] text-slate-500">
+              Production Analytics
+            </p>
+
+            <h3 className="mt-1 font-[family-name:var(--font-display)] text-lg font-semibold text-slate-100">
+              Shift OEE Comparison
+            </h3>
+          </div>
+
+          <div className="grid gap-4 sm:grid-cols-3">
+            {[
+              {
+                label: "Shift A",
+                time: "06:00–14:00",
+                data: shiftOEE.shiftA,
+              },
+              {
+                label: "Shift B",
+                time: "14:00–22:00",
+                data: shiftOEE.shiftB,
+              },
+              {
+                label: "Shift C",
+                time: "22:00–06:00",
+                data: shiftOEE.shiftC,
+              },
+            ].map((shift) => (
+              <div
+                key={shift.label}
+                className="rounded-xl border border-white/[0.06] bg-black/10 p-4"
+              >
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-xs font-medium text-slate-300">
+                      {shift.label}
+                    </p>
+
+                    <p className="mt-1 font-[family-name:var(--font-mono)] text-[8px] text-slate-600">
+                      {shift.time}
+                    </p>
+                  </div>
+
+                  <span className="font-[family-name:var(--font-display)] text-2xl font-semibold text-sky-300">
+                    {shift.data ? shift.data.oee.toFixed(1) : "--"}%
+                  </span>
+                </div>
+
+                <div className="mt-4 h-1.5 overflow-hidden rounded-full bg-white/[0.05]">
+                  <div
+                    className="h-full rounded-full bg-gradient-to-r from-sky-500 to-cyan-300 transition-all duration-1000"
+                    style={{
+                      width: `${Math.min(shift.data?.oee ?? 0, 100)}%`,
+                    }}
+                  />
+                </div>
+              </div>
+            ))}
+          </div>
+        </section>
+                {/* HISTORICAL OEE TREND */}
+        <section className="mb-8 rounded-2xl border border-white/[0.07] bg-white/[0.035] p-5 backdrop-blur-[24px]">
+          <div className="mb-6 flex items-start justify-between gap-4">
+            <div>
+              <p className="font-[family-name:var(--font-mono)] text-[9px] uppercase tracking-[0.18em] text-slate-500">
+                Production Analytics
+              </p>
+
+              <h3 className="mt-1 font-[family-name:var(--font-display)] text-lg font-semibold text-slate-100">
+                Historical OEE Trend
+              </h3>
+
+              <p className="mt-1 text-xs text-slate-500">
+                Latest {oeeHistory.length} stored OEE calculations
+              </p>
+            </div>
+
+            <div className="rounded-full border border-sky-400/10 bg-sky-400/[0.04] px-3 py-1.5 font-[family-name:var(--font-mono)] text-[9px] text-sky-300">
+              Live DB History
+            </div>
+          </div>
+
+          {oeeHistory.length === 0 ? (
+            <div className="flex h-52 items-center justify-center rounded-xl border border-white/[0.05] bg-black/10">
+              <p className="text-xs text-slate-500">
+                No OEE history available
+              </p>
+            </div>
+          ) : (
+            <div className="relative">
+              {/* chart guide lines */}
+              <div className="pointer-events-none absolute inset-x-0 top-0 flex h-48 flex-col justify-between">
+                {[100, 75, 50, 25, 0].map((value) => (
+                  <div
+                    key={value}
+                    className="flex items-center gap-3"
+                  >
+                    <span className="w-7 text-right font-[family-name:var(--font-mono)] text-[8px] text-slate-700">
+                      {value}
+                    </span>
+
+                    <div className="h-px flex-1 bg-white/[0.045]" />
+                  </div>
+                ))}
+              </div>
+
+              {/* bars */}
+              <div className="relative ml-10 flex h-48 items-end gap-2">
+                {oeeHistory.map((record) => (
+                  <div
+                    key={record.id}
+                    className="group relative flex h-full min-w-0 flex-1 items-end"
+                  >
+                    <div
+                      className="relative w-full rounded-t-md bg-gradient-to-t from-sky-600/70 via-sky-400/80 to-cyan-300 shadow-[0_0_12px_rgba(56,189,248,0.12)] transition-all duration-500 group-hover:from-sky-500 group-hover:to-cyan-200"
+                      style={{
+                        height: `${Math.max(
+                          Math.min(record.oee, 100),
+                          2
+                        )}%`,
+                      }}
+                    >
+                      {/* hover tooltip */}
+                      <div className="pointer-events-none absolute bottom-full left-1/2 z-20 mb-2 hidden -translate-x-1/2 whitespace-nowrap rounded-lg border border-white/[0.08] bg-[#07101c] px-3 py-2 shadow-xl group-hover:block">
+                        <p className="font-[family-name:var(--font-display)] text-sm font-semibold text-sky-300">
+                          {record.oee.toFixed(1)}%
+                        </p>
+
+                        <p className="mt-1 font-[family-name:var(--font-mono)] text-[8px] text-slate-500">
+                          {new Date(
+                            record.timestamp
+                          ).toLocaleTimeString()}
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+
+              {/* timestamps */}
+              <div className="ml-10 mt-3 flex justify-between">
+                <span className="font-[family-name:var(--font-mono)] text-[8px] text-slate-600">
+                  {oeeHistory[0]
+                    ? new Date(
+                        oeeHistory[0].timestamp
+                      ).toLocaleTimeString()
+                    : ""}
+                </span>
+
+                <span className="font-[family-name:var(--font-mono)] text-[8px] text-slate-600">
+                  {oeeHistory[oeeHistory.length - 1]
+                    ? new Date(
+                        oeeHistory[
+                          oeeHistory.length - 1
+                        ].timestamp
+                      ).toLocaleTimeString()
+                    : ""}
+                </span>
+              </div>
+            </div>
+          )}
+        </section>
         {/* KPI CARDS */}
         <section className="mb-8 grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
           {kpis.map((kpi, index) => (
@@ -546,7 +836,9 @@ const machines = [
 
                     <div className="mt-3 flex items-end gap-1.5">
                       <span className="font-[family-name:var(--font-display)] text-[30px] font-semibold leading-none tracking-[-0.04em] text-slate-100">
-                        {kpi.value}
+                        {kpi.label === "OEE" && oeeData
+                          ? oeeData.oee.toFixed(1)
+                          : kpi.value}
                       </span>
 
                       <span className="mb-0.5 text-[11px] font-medium text-slate-500">
@@ -642,9 +934,9 @@ const machines = [
 
                 <p className="mt-1 font-[family-name:var(--font-display)] text-lg font-semibold text-slate-200">
                   {temperature ? temperature.value.toFixed(1) : "--"}
-<span className="ml-1 text-[10px] font-normal text-slate-500">
-  °C
-</span>
+                  <span className="ml-1 text-[10px] font-normal text-slate-500">
+                    °C
+                  </span>
                 </p>
               </div>
             </div>
@@ -669,27 +961,27 @@ const machines = [
             {/* bars */}
             <div className="relative z-10 flex h-[220px] items-end gap-1.5 pt-4 sm:gap-2">
               {temperatureHistory.map((reading, index, array) => {
-  const point = {
-    time: new Date(reading.timestamp).toLocaleTimeString([], {
-      hour: "2-digit",
-      minute: "2-digit",
-      second: "2-digit",
-    }),
-    value: reading.value,
-  };
+                const point = {
+                  time: new Date(reading.timestamp).toLocaleTimeString([], {
+                    hour: "2-digit",
+                    minute: "2-digit",
+                    second: "2-digit",
+                  }),
+                  value: reading.value,
+                };
 
-  const minTemp = 20;
-  const maxTemp = 40;
+                const minTemp = 20;
+                const maxTemp = 40;
 
-  const height = Math.max(
-    5,
-    Math.min(
-      100,
-      ((point.value - minTemp) / (maxTemp - minTemp)) * 100
-    )
-  );
+                const height = Math.max(
+                  5,
+                  Math.min(
+                    100,
+                    ((point.value - minTemp) / (maxTemp - minTemp)) * 100,
+                  ),
+                );
 
-  const isCurrent = index === array.length - 1;
+                const isCurrent = index === array.length - 1;
 
                 return (
                   <div
@@ -826,23 +1118,6 @@ const machines = [
 
             {/* machine footer */}
             <div className="flex items-center justify-between border-t border-white/[0.06] bg-white/[0.015] px-6 py-3">
-              <div className="flex items-center gap-4">
-                <span className="flex items-center gap-1.5 font-[family-name:var(--font-mono)] text-[8px] uppercase tracking-[0.12em] text-slate-600">
-                  <span className="h-1.5 w-1.5 rounded-full bg-emerald-400" />4
-                  Running
-                </span>
-
-                <span className="flex items-center gap-1.5 font-[family-name:var(--font-mono)] text-[8px] uppercase tracking-[0.12em] text-slate-600">
-                  <span className="h-1.5 w-1.5 rounded-full bg-amber-400" />1
-                  Warning
-                </span>
-
-                <span className="flex items-center gap-1.5 font-[family-name:var(--font-mono)] text-[8px] uppercase tracking-[0.12em] text-slate-600">
-                  <span className="h-1.5 w-1.5 rounded-full bg-rose-500" />1
-                  Fault
-                </span>
-              </div>
-
               <Link
                 href="/dashboard/machines"
                 className="text-[10px] font-medium text-sky-400 transition-colors hover:text-sky-300"
@@ -1102,7 +1377,8 @@ const machines = [
               <span className="h-1.5 w-1.5 rounded-full bg-emerald-400 shadow-[0_0_7px_rgba(52,211,153,0.6)]" />
 
               <span className="font-[family-name:var(--font-mono)] text-[8px] uppercase tracking-[0.14em] text-slate-600">
-                {[temperature, vibration, irSensor].filter(Boolean).length} sensors online
+                {[temperature, vibration, irSensor].filter(Boolean).length}{" "}
+                sensors online
               </span>
             </div>
 

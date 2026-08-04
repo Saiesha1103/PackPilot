@@ -1,3 +1,5 @@
+from datetime import datetime
+
 from pydantic import BaseModel, Field, model_validator
 
 
@@ -28,3 +30,16 @@ class OEEResponse(BaseModel):
     performance: float
     quality: float
     oee: float
+
+
+class OEEHistoryResponse(BaseModel):
+    id: int
+    availability: float
+    performance: float
+    quality: float
+    oee: float
+    timestamp: datetime
+
+    model_config = {
+        "from_attributes": True
+    }

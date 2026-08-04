@@ -10,6 +10,7 @@ from app.models.alert import Alert
 from app.models.pfmea import PFMEA
 from app.models.report import Report
 from app.models.changeover import Changeover
+from app.models.oee import OEERecord
 
 
 def init_db():
