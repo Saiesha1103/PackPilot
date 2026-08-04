@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   Activity,
   AlertTriangle,
@@ -17,6 +17,16 @@ import {
   ArrowDownRight,
   ArrowUpRight,
 } from "lucide-react";
+import {
+  getDowntimeEvents,
+  getDowntimeAnalytics,
+  getDowntimeByReason,
+  getDowntimeByMachine,
+  type DowntimeEvent as ApiDowntimeEvent,
+  type DowntimeAnalytics,
+  type DowntimeReasonAnalytics,
+  type DowntimeMachineAnalytics,
+} from "@/lib/api";
 
 /* ============================================================
    TYPES
@@ -47,7 +57,7 @@ type DowntimeType = "Planned" | "Unplanned";
 type DowntimeStatus = "Active" | "Resolved";
 type DowntimeImpact = "High" | "Medium" | "Low";
 
-type DowntimeEvent = {
+type DowntimeEventView = {
   id: string;
   machine: string;
   line: string;
@@ -145,7 +155,7 @@ const LINES: LineAvailability[] = [
   },
 ];
 
-const EVENTS: DowntimeEvent[] = [
+const EVENTS: DowntimeEventView[] = [
   {
     id: "EVT-3401",
     machine: "CF-03",
@@ -285,14 +295,131 @@ function TypePill({ type }: { type: DowntimeType }) {
    ============================================================ */
 
 export default function DowntimePage() {
+  const [apiEvents, setApiEvents] = useState<ApiDowntimeEvent[]>([]);
+  const [downtimeAnalytics, setDowntimeAnalytics] =
+    useState<DowntimeAnalytics | null>(null);
+  const [reasonAnalytics, setReasonAnalytics] = useState<
+    DowntimeReasonAnalytics[]
+  >([]);
+  const [machineAnalytics, setMachineAnalytics] = useState<
+    DowntimeMachineAnalytics[]
+  >([]);
+  const [downtimeLoading, setDowntimeLoading] = useState(true);
   const [activeTab, setActiveTab] = useState<(typeof TABS)[number]>("All");
 
   const [search, setSearch] = useState("");
   const [lineFilter, setLineFilter] = useState("All Lines");
   const [sortBy, setSortBy] = useState("Newest First");
+  useEffect(() => {
+    async function fetchDowntimeData() {
+      try {
+        const [events, analytics, reasons, machines] = await Promise.all([
+          getDowntimeEvents(),
+          getDowntimeAnalytics(),
+          getDowntimeByReason(),
+          getDowntimeByMachine(),
+        ]);
 
+        setApiEvents(events);
+        setDowntimeAnalytics(analytics);
+        setReasonAnalytics(reasons);
+        setMachineAnalytics(machines);
+      } catch (error) {
+        console.error("Failed to fetch downtime data:", error);
+      } finally {
+        setDowntimeLoading(false);
+      }
+    }
+
+    fetchDowntimeData();
+
+    const interval = setInterval(fetchDowntimeData, 5000);
+
+    return () => clearInterval(interval);
+  }, []);
+  const liveEvents: DowntimeEventView[] = apiEvents.map((event) => {
+    const isActive = event.end_time === null;
+
+    const isPlanned =
+      event.reason === "Planned Maintenance" || event.reason === "Changeover";
+
+    const durationMinutes = event.duration_minutes ?? 0;
+
+    let impact: DowntimeImpact = "Low";
+
+    if (isActive || durationMinutes >= 60) {
+      impact = "High";
+    } else if (durationMinutes >= 15) {
+      impact = "Medium";
+    }
+
+    return {
+      id: `DT-${String(event.id).padStart(3, "0")}`,
+      machine: `Machine ${event.machine_id}`,
+      line: `Line ${event.machine_id}`,
+      reason: event.reason,
+      type: isPlanned ? "Planned" : "Unplanned",
+
+      started: new Date(event.start_time).toLocaleTimeString([], {
+        hour: "2-digit",
+        minute: "2-digit",
+      }),
+
+      duration: isActive ? "Active" : `${durationMinutes} min`,
+
+      impact: impact,
+      status: isActive ? "Active" : "Resolved",
+    };
+  });
+  const plannedDowntimeMinutes = apiEvents
+    .filter(
+      (event) =>
+        event.reason === "Planned Maintenance" || event.reason === "Changeover",
+    )
+    .reduce((total, event) => total + (event.duration_minutes ?? 0), 0);
+
+  const unplannedDowntimeMinutes = apiEvents
+    .filter(
+      (event) =>
+        event.reason !== "Planned Maintenance" && event.reason !== "Changeover",
+    )
+    .reduce((total, event) => total + (event.duration_minutes ?? 0), 0);
   const filteredEvents = useMemo(() => {
-    let result = EVENTS.filter((event) => {
+    const liveEvents: DowntimeEventView[] = apiEvents.map((event) => {
+      const isActive = event.end_time === null;
+
+      const isPlanned =
+        event.reason === "Planned Maintenance" || event.reason === "Changeover";
+
+      const durationMinutes = event.duration_minutes ?? 0;
+
+      let impact: DowntimeImpact = "Low";
+
+      if (isActive || durationMinutes >= 60) {
+        impact = "High";
+      } else if (durationMinutes >= 15) {
+        impact = "Medium";
+      }
+
+      return {
+        id: `DT-${String(event.id).padStart(3, "0")}`,
+        machine: `Machine ${event.machine_id}`,
+        line: `Line ${event.machine_id}`,
+        reason: event.reason,
+        type: isPlanned ? "Planned" : "Unplanned",
+
+        started: new Date(event.start_time).toLocaleTimeString([], {
+          hour: "2-digit",
+          minute: "2-digit",
+        }),
+
+        duration: isActive ? "Active" : `${durationMinutes} min`,
+
+        impact,
+        status: isActive ? "Active" : "Resolved",
+      };
+    });
+    let result = liveEvents.filter((event) => {
       const matchesTab =
         activeTab === "All" ||
         (activeTab === "Active" && event.status === "Active") ||
@@ -328,7 +455,7 @@ export default function DowntimePage() {
     }
 
     return result;
-  }, [activeTab, search, lineFilter, sortBy]);
+  }, [liveEvents, activeTab, search, lineFilter, sortBy]);
 
   return (
     /*
@@ -399,18 +526,19 @@ export default function DowntimePage() {
             <div className="relative flex items-start justify-between gap-4">
               <div>
                 <p className="font-[family-name:var(--font-mono)] text-[9px] uppercase tracking-[0.17em] text-slate-500">
-                  Downtime Today
+                  Total Downtime
                 </p>
 
                 <p className="mt-4 font-[family-name:var(--font-display)] text-[31px] font-semibold tracking-tight text-slate-100">
-                  3h 21m
+                  {downtimeLoading
+                    ? "--"
+                    : `${downtimeAnalytics?.total_downtime_minutes ?? 0} min`}
                 </p>
-
                 <div className="mt-2 flex items-center gap-1">
-                  <ArrowDownRight className="h-3.5 w-3.5 text-emerald-300" />
+                  <span className="h-1.5 w-1.5 rounded-full bg-cyan-400" />
 
-                  <span className="text-[11px] font-medium text-emerald-300">
-                    8.4% vs yesterday
+                  <span className="text-[11px] font-medium text-cyan-300">
+                    Live database
                   </span>
                 </div>
 
@@ -436,7 +564,10 @@ export default function DowntimePage() {
                 </p>
 
                 <p className="mt-4 font-[family-name:var(--font-display)] text-[31px] font-semibold tracking-tight text-slate-100">
-                  2
+                  {downtimeLoading
+                    ? "--"
+                    : apiEvents.filter((event) => event.end_time === null)
+                        .length}
                 </p>
 
                 <p className="mt-2 text-[11px] text-slate-500">
@@ -447,7 +578,9 @@ export default function DowntimePage() {
                   <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-amber-300 shadow-[0_0_7px_rgba(252,211,77,0.7)]" />
 
                   <span className="font-[family-name:var(--font-mono)] text-[9px] uppercase tracking-[0.1em] text-amber-300">
-                    Response pending
+                    {apiEvents.some((event) => event.end_time === null)
+                      ? "Response pending"
+                      : "No active stops"}
                   </span>
                 </div>
               </div>
@@ -498,11 +631,13 @@ export default function DowntimePage() {
             <div className="relative flex items-start justify-between gap-4">
               <div>
                 <p className="font-[family-name:var(--font-mono)] text-[9px] uppercase tracking-[0.17em] text-slate-500">
-                  Unplanned Events
+                  Downtime Events
                 </p>
 
                 <p className="mt-4 font-[family-name:var(--font-display)] text-[31px] font-semibold tracking-tight text-slate-100">
-                  4
+                  {downtimeLoading
+                    ? "--"
+                    : (downtimeAnalytics?.total_events ?? 0)}
                 </p>
 
                 <p className="mt-2 text-[11px] text-slate-500">Current shift</p>
@@ -859,11 +994,11 @@ export default function DowntimePage() {
                 </p>
 
                 <h2 className="mt-1.5 font-[family-name:var(--font-display)] text-lg font-semibold tracking-tight text-slate-100">
-                  Line Availability
+                  Machine Downtime
                 </h2>
 
                 <p className="mt-1 text-[11px] text-slate-600">
-                  Current shift availability and accumulated downtime
+                  Downtime activity across connected production assets
                 </p>
               </div>
 
@@ -871,18 +1006,23 @@ export default function DowntimePage() {
                 <span className="h-1.5 w-1.5 rounded-full bg-emerald-400 shadow-[0_0_7px_rgba(52,211,153,0.7)]" />
 
                 <span className="font-[family-name:var(--font-mono)] text-[8px] uppercase tracking-[0.12em] text-slate-500">
-                  5 Lines Monitored
+                  {machineAnalytics.length}{" "}
+                  {machineAnalytics.length === 1
+                    ? "Machine Monitored"
+                    : "Machines Monitored"}
                 </span>
               </div>
             </div>
 
             <div className="relative mt-6 space-y-3">
-              {LINES.map((item) => {
-                const needsAttention = item.status === "Attention";
+              {machineAnalytics.map((item) => {
+                const needsAttention =
+                  item.active_stops > 0 ||
+                  item.machine_status.toLowerCase() !== "running";
 
                 return (
                   <div
-                    key={item.line}
+                    key={item.machine_id}
                     className={`group rounded-xl border p-4 transition-all duration-300 ${
                       needsAttention
                         ? "border-amber-400/[0.12] bg-amber-400/[0.025] hover:border-amber-400/20"
@@ -905,7 +1045,7 @@ export default function DowntimePage() {
                           </p>
 
                           <span className="text-[10px] text-slate-600">
-                            {item.segment}
+                            {item.line}
                           </span>
                         </div>
 
@@ -919,7 +1059,7 @@ export default function DowntimePage() {
                                   : "text-slate-300"
                               }
                             >
-                              {item.downtimeMinutes}m
+                              {item.total_downtime_minutes}m
                             </span>
                           </span>
 
@@ -930,36 +1070,53 @@ export default function DowntimePage() {
                                 : "border-emerald-400/15 bg-emerald-400/[0.055] text-emerald-300"
                             }`}
                           >
-                            {item.status}
+                            {item.active_stops > 0
+                              ? "Active Stop"
+                              : item.machine_status}
                           </span>
                         </div>
                       </div>
 
-                      <div className="flex shrink-0 items-end gap-1">
-                        <span
-                          className={`font-[family-name:var(--font-display)] text-2xl font-semibold ${
-                            needsAttention ? "text-amber-300" : "text-slate-100"
-                          }`}
-                        >
-                          {item.availability.toFixed(1)}
-                        </span>
+                      <div className="flex shrink-0 items-center gap-6">
+                        <div className="text-right">
+                          <p className="font-[family-name:var(--font-display)] text-2xl font-semibold text-slate-100">
+                            {item.event_count}
+                          </p>
 
-                        <span className="mb-1 text-[10px] text-slate-600">
-                          %
-                        </span>
+                          <p className="mt-0.5 font-[family-name:var(--font-mono)] text-[8px] uppercase tracking-[0.1em] text-slate-600">
+                            Events
+                          </p>
+                        </div>
+
+                        <div className="text-right">
+                          <p
+                            className={`font-[family-name:var(--font-display)] text-2xl font-semibold ${
+                              item.active_stops > 0
+                                ? "text-amber-300"
+                                : "text-emerald-300"
+                            }`}
+                          >
+                            {item.active_stops}
+                          </p>
+
+                          <p className="mt-0.5 font-[family-name:var(--font-mono)] text-[8px] uppercase tracking-[0.1em] text-slate-600">
+                            Active Stops
+                          </p>
+                        </div>
                       </div>
                     </div>
 
-                    {/* availability bar */}
+                    {/* machine downtime indicator */}
                     <div className="mt-3 h-1.5 overflow-hidden rounded-full bg-white/[0.045]">
                       <div
                         className={`h-full rounded-full transition-all duration-500 ${
                           needsAttention
-                            ? "bg-gradient-to-r from-amber-600 to-amber-300 shadow-[0_0_9px_rgba(251,191,36,0.2)]"
-                            : "bg-gradient-to-r from-emerald-600 to-emerald-300 shadow-[0_0_9px_rgba(52,211,153,0.2)]"
+                            ? "bg-gradient-to-r from-amber-600 to-amber-300"
+                            : "bg-gradient-to-r from-emerald-600 to-emerald-300"
                         }`}
                         style={{
-                          width: `${item.availability}%`,
+                          width:
+                            item.total_downtime_minutes > 0 ? "100%" : "0%",
                         }}
                       />
                     </div>
@@ -995,18 +1152,20 @@ export default function DowntimePage() {
               <div className="rounded-xl border border-cyan-400/[0.1] bg-cyan-400/[0.025] p-4">
                 <div className="flex items-center justify-between">
                   <span className="font-[family-name:var(--font-mono)] text-[8px] uppercase tracking-[0.14em] text-slate-600">
-                    MTBF
+                    Completed Events
                   </span>
 
                   <Activity className="h-3.5 w-3.5 text-cyan-300" />
                 </div>
 
                 <p className="mt-3 font-[family-name:var(--font-display)] text-xl font-semibold text-cyan-300">
-                  6h 42m
+                  {downtimeLoading
+                    ? "--"
+                    : (downtimeAnalytics?.total_events ?? 0)}
                 </p>
 
                 <p className="mt-1 text-[9px] text-slate-600">
-                  Mean time between failures
+                  Resolved downtime events
                 </p>
               </div>
 
@@ -1020,7 +1179,9 @@ export default function DowntimePage() {
                 </div>
 
                 <p className="mt-3 font-[family-name:var(--font-display)] text-xl font-semibold text-emerald-300">
-                  22m
+                  {downtimeLoading
+                    ? "--"
+                    : `${downtimeAnalytics?.average_downtime_minutes ?? 0}m`}
                 </p>
 
                 <p className="mt-1 text-[9px] text-slate-600">
@@ -1038,7 +1199,7 @@ export default function DowntimePage() {
                 </div>
 
                 <p className="mt-3 font-[family-name:var(--font-display)] text-xl font-semibold text-amber-300">
-                  1h 13m
+                  {downtimeLoading ? "--" : `${plannedDowntimeMinutes} min`}
                 </p>
 
                 <p className="mt-1 text-[9px] text-slate-600">
@@ -1056,7 +1217,7 @@ export default function DowntimePage() {
                 </div>
 
                 <p className="mt-3 font-[family-name:var(--font-display)] text-xl font-semibold text-rose-300">
-                  2h 08m
+                  {downtimeLoading ? "--" : `${unplannedDowntimeMinutes} min`}
                 </p>
 
                 <p className="mt-1 text-[9px] text-slate-600">
@@ -1065,74 +1226,82 @@ export default function DowntimePage() {
               </div>
             </div>
 
-            {/* DISTRIBUTION */}
+            {/* DOWNTIME BY REASON */}
             <div className="relative mt-5 rounded-xl border border-white/[0.055] bg-black/10 p-4">
               <div className="flex items-center justify-between gap-4">
                 <div>
                   <p className="font-[family-name:var(--font-mono)] text-[8px] uppercase tracking-[0.14em] text-slate-600">
-                    Downtime Distribution
+                    Downtime by Reason
                   </p>
 
                   <p className="mt-1 text-[10px] text-slate-500">
-                    Planned vs unplanned loss
+                    Duration grouped by downtime reason
                   </p>
                 </div>
 
                 <span className="font-[family-name:var(--font-mono)] text-[9px] text-slate-500">
-                  201 min
+                  {downtimeLoading
+                    ? "--"
+                    : `${downtimeAnalytics?.total_downtime_minutes ?? 0} min total`}
                 </span>
               </div>
 
-              <div className="mt-4 flex h-3 overflow-hidden rounded-full border border-white/[0.055] bg-white/[0.025]">
-                <div
-                  className="h-full bg-gradient-to-r from-amber-600 to-amber-400 shadow-[0_0_10px_rgba(251,191,36,0.2)]"
-                  style={{
-                    width: `${(73 / 201) * 100}%`,
-                  }}
-                />
+              <div className="mt-4 space-y-4">
+                {downtimeLoading ? (
+                  <p className="text-[10px] text-slate-500">
+                    Loading downtime reasons...
+                  </p>
+                ) : reasonAnalytics.length === 0 ? (
+                  <p className="text-[10px] text-slate-500">
+                    No downtime data recorded
+                  </p>
+                ) : (
+                  reasonAnalytics.map((item) => {
+                    const totalMinutes =
+                      downtimeAnalytics?.total_downtime_minutes ?? 0;
 
-                <div
-                  className="h-full bg-gradient-to-r from-rose-600 to-rose-400 shadow-[0_0_10px_rgba(251,113,133,0.2)]"
-                  style={{
-                    width: `${(128 / 201) * 100}%`,
-                  }}
-                />
-              </div>
+                    const percentage =
+                      totalMinutes > 0
+                        ? (item.total_downtime_minutes / totalMinutes) * 100
+                        : 0;
 
-              <div className="mt-3 grid grid-cols-2 gap-3">
-                <div>
-                  <div className="flex items-center gap-1.5">
-                    <span className="h-1.5 w-1.5 rounded-full bg-amber-400" />
+                    return (
+                      <div key={item.reason}>
+                        <div className="flex items-center justify-between gap-3">
+                          <div>
+                            <p className="text-[11px] font-medium text-slate-300">
+                              {item.reason}
+                            </p>
 
-                    <span className="text-[10px] text-slate-500">Planned</span>
-                  </div>
+                            <p className="mt-0.5 text-[9px] text-slate-600">
+                              {item.event_count}{" "}
+                              {item.event_count === 1 ? "event" : "events"}
+                            </p>
+                          </div>
 
-                  <div className="mt-1 flex items-baseline gap-1.5">
-                    <span className="font-[family-name:var(--font-mono)] text-sm font-semibold text-amber-300">
-                      36.3%
-                    </span>
+                          <div className="text-right">
+                            <p className="font-[family-name:var(--font-mono)] text-[11px] font-medium text-slate-300">
+                              {item.total_downtime_minutes} min
+                            </p>
 
-                    <span className="text-[9px] text-slate-600">73 min</span>
-                  </div>
-                </div>
+                            <p className="mt-0.5 text-[9px] text-slate-600">
+                              {percentage.toFixed(1)}%
+                            </p>
+                          </div>
+                        </div>
 
-                <div>
-                  <div className="flex items-center gap-1.5">
-                    <span className="h-1.5 w-1.5 rounded-full bg-rose-400" />
-
-                    <span className="text-[10px] text-slate-500">
-                      Unplanned
-                    </span>
-                  </div>
-
-                  <div className="mt-1 flex items-baseline gap-1.5">
-                    <span className="font-[family-name:var(--font-mono)] text-sm font-semibold text-rose-300">
-                      63.7%
-                    </span>
-
-                    <span className="text-[9px] text-slate-600">128 min</span>
-                  </div>
-                </div>
+                        <div className="mt-2 h-2 overflow-hidden rounded-full bg-white/[0.035]">
+                          <div
+                            className="h-full rounded-full bg-gradient-to-r from-rose-600 to-rose-400 transition-all duration-700"
+                            style={{
+                              width: `${percentage}%`,
+                            }}
+                          />
+                        </div>
+                      </div>
+                    );
+                  })
+                )}
               </div>
             </div>
 
@@ -1149,10 +1318,31 @@ export default function DowntimePage() {
                   </p>
 
                   <p className="mt-1 text-[10px] leading-5 text-slate-600">
-                    Unplanned losses represent{" "}
-                    <span className="font-medium text-rose-300">63.7%</span> of
-                    today&apos;s downtime. Reducing mechanical recurrence would
-                    provide the largest availability gain.
+                    {downtimeAnalytics &&
+                    downtimeAnalytics.total_downtime_minutes > 0 ? (
+                      <>
+                        Unplanned losses represent{" "}
+                        <span className="font-medium text-rose-300">
+                          {(
+                            (unplannedDowntimeMinutes /
+                              downtimeAnalytics.total_downtime_minutes) *
+                            100
+                          ).toFixed(1)}
+                          %
+                        </span>{" "}
+                        of recorded downtime.{" "}
+                        {downtimeAnalytics.top_reason && (
+                          <>
+                            <span className="font-medium text-slate-400">
+                              {downtimeAnalytics.top_reason}
+                            </span>{" "}
+                            is currently the leading downtime reason.
+                          </>
+                        )}
+                      </>
+                    ) : (
+                      <>No downtime losses recorded.</>
+                    )}
                   </p>
                 </div>
               </div>
@@ -1393,7 +1583,7 @@ export default function DowntimePage() {
           {/* TABLE FOOTER */}
           <div className="flex flex-col gap-2 border-t border-white/[0.055] bg-black/[0.08] px-5 py-3 sm:flex-row sm:items-center sm:justify-between sm:px-6">
             <span className="font-[family-name:var(--font-mono)] text-[8px] uppercase tracking-[0.12em] text-slate-600">
-              Showing {filteredEvents.length} of {EVENTS.length} events
+              Showing {filteredEvents.length} of {apiEvents.length} events
             </span>
 
             <div className="flex items-center gap-2">

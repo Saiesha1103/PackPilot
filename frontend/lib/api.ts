@@ -124,3 +124,112 @@ export async function getOEEHistory(
 
   return response.json();
 }
+/* ---------------------------- DOWNTIME TYPES ---------------------------- */
+
+export type DowntimeEvent = {
+  id: number;
+  machine_id: number;
+  reason: string;
+  start_time: string;
+  end_time: string | null;
+  duration_minutes: number | null;
+};
+
+export type DowntimeAnalytics = {
+  total_events: number;
+  total_downtime_minutes: number;
+  average_downtime_minutes: number;
+  top_reason: string | null;
+};
+
+export type DowntimeReasonAnalytics = {
+  reason: string;
+  event_count: number;
+  total_downtime_minutes: number;
+};
+
+
+/* ----------------------------- DOWNTIME APIs ----------------------------- */
+
+export async function getDowntimeEvents(): Promise<DowntimeEvent[]> {
+  const response = await fetch(
+    `${API_BASE_URL}/downtime/`,
+    {
+      cache: "no-store",
+    }
+  );
+
+  if (!response.ok) {
+    throw new Error(
+      "Failed to fetch downtime events"
+    );
+  }
+
+  return response.json();
+}
+
+
+export async function getDowntimeAnalytics(): Promise<DowntimeAnalytics> {
+  const response = await fetch(
+    `${API_BASE_URL}/downtime/analytics`,
+    {
+      cache: "no-store",
+    }
+  );
+
+  if (!response.ok) {
+    throw new Error(
+      "Failed to fetch downtime analytics"
+    );
+  }
+
+  return response.json();
+}
+
+
+export async function getDowntimeByReason(): Promise<
+  DowntimeReasonAnalytics[]
+> {
+  const response = await fetch(
+    `${API_BASE_URL}/downtime/analytics/by-reason`,
+    {
+      cache: "no-store",
+    }
+  );
+
+  if (!response.ok) {
+    throw new Error(
+      "Failed to fetch downtime reason analytics"
+    );
+  }
+
+  return response.json();
+}
+export type DowntimeMachineAnalytics = {
+  machine_id: number;
+  machine_name: string;
+  line: string;
+  machine_status: string;
+  event_count: number;
+  total_downtime_minutes: number;
+  active_stops: number;
+};
+
+export async function getDowntimeByMachine(): Promise<
+  DowntimeMachineAnalytics[]
+> {
+  const response = await fetch(
+    `${API_BASE_URL}/downtime/analytics/by-machine`,
+    {
+      cache: "no-store",
+    }
+  );
+
+  if (!response.ok) {
+    throw new Error(
+      "Failed to fetch machine downtime analytics"
+    );
+  }
+
+  return response.json();
+}
