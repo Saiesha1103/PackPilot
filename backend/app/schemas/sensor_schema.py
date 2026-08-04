@@ -12,3 +12,17 @@ class SensorResponse(SensorCreate):
 
     class Config:
         from_attributes = True
+from datetime import datetime
+
+
+class SensorReadingCreate(BaseModel):
+    sensor_id: int
+    value: float
+
+
+class SensorReadingResponse(SensorReadingCreate):
+    id: int
+    timestamp: datetime
+
+    class Config:
+        from_attributes = True

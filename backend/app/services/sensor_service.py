@@ -1,6 +1,6 @@
 from sqlalchemy.orm import Session
 
-from app.models.sensor import Sensor
+from app.models.sensor import Sensor, SensorReading
 
 
 def create_sensor(db: Session, sensor):
@@ -53,3 +53,32 @@ def delete_sensor(db: Session, sensor_id: int):
         db.commit()
 
     return db_sensor
+def create_sensor_reading(db: Session, reading):
+    db_reading = SensorReading(
+        sensor_id=reading.sensor_id,
+        value=reading.value
+    )
+
+    db.add(db_reading)
+    db.commit()
+    db.refresh(db_reading)
+
+    return db_reading
+
+
+def get_sensor_readings(db: Session, sensor_id: int):
+    return (
+        db.query(SensorReading)
+        .filter(SensorReading.sensor_id == sensor_id)
+        .order_by(SensorReading.timestamp.desc())
+        .all()
+    )
+
+
+def get_latest_sensor_reading(db: Session, sensor_id: int):
+    return (
+        db.query(SensorReading)
+        .filter(SensorReading.sensor_id == sensor_id)
+        .order_by(SensorReading.timestamp.desc())
+        .first()
+    )

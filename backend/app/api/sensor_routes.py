@@ -2,13 +2,21 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
 from app.database.database import get_db
-from app.schemas.sensor_schema import SensorCreate, SensorResponse
+from app.schemas.sensor_schema import (
+    SensorCreate,
+    SensorResponse,
+    SensorReadingCreate,
+    SensorReadingResponse,
+)
 from app.services.sensor_service import (
     create_sensor,
     get_all_sensors,
     get_sensor,
     update_sensor,
     delete_sensor,
+    create_sensor_reading,
+    get_sensor_readings,
+    get_latest_sensor_reading,
 )
 
 router = APIRouter(
@@ -88,3 +96,69 @@ def remove_sensor(
     return {
         "message": "Sensor deleted successfully"
     }
+@router.post(
+    "/readings",
+    response_model=SensorReadingResponse
+)
+def add_sensor_reading(
+    reading: SensorReadingCreate,
+    db: Session = Depends(get_db)
+):
+    sensor = get_sensor(db, reading.sensor_id)
+
+    if sensor is None:
+        raise HTTPException(
+            status_code=404,
+            detail="Sensor not found"
+        )
+
+    return create_sensor_reading(db, reading)
+
+
+@router.get(
+    "/{sensor_id}/readings",
+    response_model=list[SensorReadingResponse]
+)
+def read_sensor_readings(
+    sensor_id: int,
+    db: Session = Depends(get_db)
+):
+    sensor = get_sensor(db, sensor_id)
+
+    if sensor is None:
+        raise HTTPException(
+            status_code=404,
+            detail="Sensor not found"
+        )
+
+    return get_sensor_readings(db, sensor_id)
+
+
+@router.get(
+    "/{sensor_id}/readings/latest",
+    response_model=SensorReadingResponse
+)
+def read_latest_sensor_reading(
+    sensor_id: int,
+    db: Session = Depends(get_db)
+):
+    sensor = get_sensor(db, sensor_id)
+
+    if sensor is None:
+        raise HTTPException(
+            status_code=404,
+            detail="Sensor not found"
+        )
+
+    reading = get_latest_sensor_reading(
+        db,
+        sensor_id
+    )
+
+    if reading is None:
+        raise HTTPException(
+            status_code=404,
+            detail="No readings found for this sensor"
+        )
+
+    return reading
