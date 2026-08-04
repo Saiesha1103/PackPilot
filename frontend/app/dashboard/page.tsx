@@ -2,6 +2,11 @@
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import { Space_Grotesk, Inter, JetBrains_Mono } from "next/font/google";
+import {
+  getLatestSensorReading,
+  getSensorReadings,
+  type SensorReading,
+} from "@/lib/api";
 
 const display = Space_Grotesk({
   subsets: ["latin"],
@@ -58,44 +63,7 @@ const kpis = [
   },
 ];
 
-const machines = [
-  {
-    name: "CNC Mill — L3",
-    zone: "Fabrication",
-    status: "running",
-    load: 92,
-  },
-  {
-    name: "Robotic Weld Cell 2",
-    zone: "Assembly",
-    status: "running",
-    load: 78,
-  },
-  {
-    name: "Injection Press 7",
-    zone: "Molding",
-    status: "warning",
-    load: 64,
-  },
-  {
-    name: "Conveyor Sort A",
-    zone: "Logistics",
-    status: "running",
-    load: 55,
-  },
-  {
-    name: "Laser Cutter 4",
-    zone: "Fabrication",
-    status: "fault",
-    load: 0,
-  },
-  {
-    name: "Palletizer 1",
-    zone: "Packaging",
-    status: "running",
-    load: 88,
-  },
-];
+
 
 const alerts = [
   {
@@ -117,44 +85,6 @@ const alerts = [
     level: "warning",
     msg: "Zone: Molding — ambient temp above threshold",
     time: "1h ago",
-  },
-];
-
-const sensorLog = [
-  {
-    id: "TMP-2231",
-    zone: "Molding",
-    reading: "78.4°C",
-    status: "nominal",
-    ts: "14:22:08",
-  },
-  {
-    id: "VIB-1187",
-    zone: "Fabrication",
-    reading: "0.042g",
-    status: "nominal",
-    ts: "14:21:54",
-  },
-  {
-    id: "PRS-0940",
-    zone: "Molding",
-    reading: "142.6 bar",
-    status: "elevated",
-    ts: "14:21:40",
-  },
-  {
-    id: "FLW-3312",
-    zone: "Logistics",
-    reading: "6.8 m/s",
-    status: "nominal",
-    ts: "14:21:22",
-  },
-  {
-    id: "TMP-0087",
-    zone: "Fabrication",
-    reading: "312.1°C",
-    status: "critical",
-    ts: "14:21:05",
   },
 ];
 
@@ -207,6 +137,20 @@ function sensorColor(status: string) {
 export default function DashboardPage() {
   const [tick, setTick] = useState(0);
 
+  const [temperature, setTemperature] =
+    useState<SensorReading | null>(null);
+
+  const [vibration, setVibration] =
+    useState<SensorReading | null>(null);
+
+  const [irSensor, setIrSensor] =
+    useState<SensorReading | null>(null);
+
+  const [temperatureHistory, setTemperatureHistory] =
+    useState<SensorReading[]>([]);
+
+
+  // Existing dashboard animation
   useEffect(() => {
     const id = setInterval(() => {
       setTick((t) => t + 1);
@@ -215,6 +159,128 @@ export default function DashboardPage() {
     return () => clearInterval(id);
   }, []);
 
+
+  // Live sensor values — refresh every 2 seconds
+  useEffect(() => {
+    async function fetchLiveSensors() {
+      try {
+        const [temp, vib, ir] = await Promise.all([
+          getLatestSensorReading(1),
+          getLatestSensorReading(2),
+          getLatestSensorReading(3),
+        ]);
+
+        setTemperature(temp);
+        setVibration(vib);
+        setIrSensor(ir);
+      } catch (error) {
+        console.error("Failed to fetch live sensor data:", error);
+      }
+    }
+
+    fetchLiveSensors();
+
+    const interval = setInterval(fetchLiveSensors, 2000);
+
+    return () => clearInterval(interval);
+  }, []);
+
+
+  // Temperature history — refresh every 10 seconds
+  useEffect(() => {
+    async function fetchTemperatureHistory() {
+      try {
+        const readings = await getSensorReadings(1);
+        setTemperatureHistory(
+          readings
+            .slice(0, 20)
+            .reverse()
+        );
+      } catch (error) {
+        console.error(
+          "Failed to fetch temperature history:",
+          error
+        );
+      }
+    }
+
+    fetchTemperatureHistory();
+
+    const interval = setInterval(
+      fetchTemperatureHistory,
+      10000
+    );
+
+    return () => clearInterval(interval);
+  }, []);
+const parseBackendTimestamp = (timestamp: string) => {
+  const normalizedTimestamp =
+    timestamp.endsWith("Z") || timestamp.includes("+")
+      ? timestamp
+      : `${timestamp}Z`;
+
+  return new Date(normalizedTimestamp).getTime();
+};
+
+const latestTelemetryTimestamp = Math.max(
+  temperature ? parseBackendTimestamp(temperature.timestamp) : 0,
+  vibration ? parseBackendTimestamp(vibration.timestamp) : 0,
+  irSensor ? parseBackendTimestamp(irSensor.timestamp) : 0
+);
+
+const telemetryAge = latestTelemetryTimestamp
+  ? Date.now() - latestTelemetryTimestamp
+  : Infinity;
+
+const isMachineOnline = telemetryAge < 15000;
+// tick keeps this calculation refreshed
+void tick;
+
+const machines = [
+  {
+    name: "Machine 1",
+    zone: "PackPilot IoT Line",
+    status: isMachineOnline ? "running" : "offline",
+  },
+];
+
+  const sensorLog = [
+    {
+      id: "TEMP-01",
+      zone: "Machine 1",
+      reading: temperature ? `${temperature.value.toFixed(1)} °C` : "-- °C",
+      status: "nominal",
+      ts: temperature
+        ? new Date(temperature.timestamp).toLocaleTimeString()
+        : "--:--:--",
+    },
+    {
+      id: "VIB-01",
+      zone: "Machine 1",
+      reading: vibration
+        ? vibration.value === 1
+          ? "Detected"
+          : "Normal"
+        : "--",
+      status: vibration?.value === 1 ? "elevated" : "nominal",
+      ts: vibration
+        ? new Date(vibration.timestamp).toLocaleTimeString()
+        : "--:--:--",
+    },
+    {
+      id: "IR-01",
+      zone: "Machine 1",
+      reading: irSensor
+        ? irSensor.value === 1
+          ? "Object Detected"
+          : "Clear"
+        : "--",
+      status: "nominal",
+      ts: irSensor
+        ? new Date(irSensor.timestamp).toLocaleTimeString()
+        : "--:--:--",
+    },
+  ];
   return (
     <div
       className={`${display.variable} ${body.variable} ${mono.variable} relative min-h-screen w-full overflow-hidden bg-[#040810] font-[family-name:var(--font-body)] text-slate-200`}
@@ -555,16 +621,16 @@ export default function DashboardPage() {
                 <span className="h-1.5 w-1.5 rounded-full bg-sky-400 shadow-[0_0_8px_2px_rgba(56,189,248,0.6)]" />
 
                 <p className="font-[family-name:var(--font-mono)] text-[9px] font-medium uppercase tracking-[0.2em] text-slate-500">
-                  Production Telemetry
+                  Live Sensor Telemetry
                 </p>
               </div>
 
               <h3 className="mt-2 font-[family-name:var(--font-display)] text-lg font-semibold tracking-tight text-slate-100">
-                Production Output
+                Temperature History
               </h3>
 
               <p className="mt-1 text-xs text-slate-500">
-                Units per hour · last 8 hours
+                Temperature °C · latest 20 readings
               </p>
             </div>
 
@@ -575,25 +641,10 @@ export default function DashboardPage() {
                 </p>
 
                 <p className="mt-1 font-[family-name:var(--font-display)] text-lg font-semibold text-slate-200">
-                  4,812
-                  <span className="ml-1 text-[10px] font-normal text-slate-500">
-                    u/hr
-                  </span>
-                </p>
-              </div>
-
-              <div className="h-8 w-px bg-white/[0.07]" />
-
-              <div>
-                <p className="font-[family-name:var(--font-mono)] text-[9px] uppercase tracking-[0.16em] text-slate-600">
-                  Target
-                </p>
-
-                <p className="mt-1 font-[family-name:var(--font-display)] text-lg font-semibold text-slate-400">
-                  5,000
-                  <span className="ml-1 text-[10px] font-normal text-slate-600">
-                    u/hr
-                  </span>
+                  {temperature ? temperature.value.toFixed(1) : "--"}
+<span className="ml-1 text-[10px] font-normal text-slate-500">
+  °C
+</span>
                 </p>
               </div>
             </div>
@@ -603,7 +654,7 @@ export default function DashboardPage() {
           <div className="relative h-[290px] px-6 pb-6 pt-7 sm:px-7">
             {/* horizontal grid */}
             <div className="pointer-events-none absolute inset-x-7 bottom-12 top-7 flex flex-col justify-between">
-              {[5000, 4000, 3000, 2000, 1000].map((value) => (
+              {[40, 35, 30, 25, 20].map((value) => (
                 <div
                   key={value}
                   className="relative border-t border-white/[0.045]"
@@ -615,46 +666,46 @@ export default function DashboardPage() {
               ))}
             </div>
 
-            {/* target line */}
-            <div className="pointer-events-none absolute left-7 right-7 top-[48px] border-t border-dashed border-amber-300/20">
-              <span className="absolute right-0 -top-5 font-[family-name:var(--font-mono)] text-[8px] uppercase tracking-[0.12em] text-amber-300/50">
-                Target
-              </span>
-            </div>
-
             {/* bars */}
-            <div className="relative z-10 flex h-[220px] items-end gap-3 pt-4 sm:gap-5">
-              {[
-                { time: "07:00", value: 3620 },
-                { time: "08:00", value: 3890 },
-                { time: "09:00", value: 4210 },
-                { time: "10:00", value: 4480 },
-                { time: "11:00", value: 4370 },
-                { time: "12:00", value: 4620 },
-                { time: "13:00", value: 4750 },
-                {
-                  time: "14:00",
-                  value: 4812 + ((tick % 3) - 1) * 18,
-                },
-              ].map((point, index, array) => {
-                const height = (point.value / 5200) * 100;
-                const isCurrent = index === array.length - 1;
+            <div className="relative z-10 flex h-[220px] items-end gap-1.5 pt-4 sm:gap-2">
+              {temperatureHistory.map((reading, index, array) => {
+  const point = {
+    time: new Date(reading.timestamp).toLocaleTimeString([], {
+      hour: "2-digit",
+      minute: "2-digit",
+      second: "2-digit",
+    }),
+    value: reading.value,
+  };
+
+  const minTemp = 20;
+  const maxTemp = 40;
+
+  const height = Math.max(
+    5,
+    Math.min(
+      100,
+      ((point.value - minTemp) / (maxTemp - minTemp)) * 100
+    )
+  );
+
+  const isCurrent = index === array.length - 1;
 
                 return (
                   <div
-                    key={point.time}
+                    key={`${reading.id}-${index}`}
                     className="group/bar flex h-full flex-1 flex-col justify-end"
                   >
                     <div className="relative flex flex-1 items-end justify-center">
                       {/* tooltip */}
                       <div className="pointer-events-none absolute bottom-[calc(100%+8px)] left-1/2 z-20 -translate-x-1/2 translate-y-2 rounded-lg border border-white/[0.08] bg-[#07101c]/90 px-2 py-1 opacity-0 shadow-xl backdrop-blur-xl transition-all duration-200 group-hover/bar:translate-y-0 group-hover/bar:opacity-100">
                         <span className="whitespace-nowrap font-[family-name:var(--font-mono)] text-[9px] text-slate-300">
-                          {point.value.toLocaleString()} u/hr
+                          {point.value.toFixed(1)} °C
                         </span>
                       </div>
 
                       <div
-                        className={`relative w-full max-w-[56px] rounded-t-md border transition-all duration-700 ${
+                        className={`relative w-full max-w-[36px] rounded-t-md border transition-all duration-700 ${
                           isCurrent
                             ? "border-sky-300/30 bg-gradient-to-t from-blue-600/35 via-sky-500/55 to-cyan-300/90 shadow-[0_0_24px_-4px_rgba(56,189,248,0.55)]"
                             : "border-sky-400/[0.12] bg-gradient-to-t from-blue-600/15 via-sky-500/25 to-sky-300/50 group-hover/bar:border-sky-300/25 group-hover/bar:to-sky-300/70"
@@ -705,12 +756,12 @@ export default function DashboardPage() {
                 </h3>
 
                 <p className="mt-1 text-xs text-slate-500">
-                  Real-time utilization across monitored assets
+                  Real-time telemetry status across monitored assets
                 </p>
               </div>
 
               <div className="rounded-full border border-white/[0.07] bg-white/[0.035] px-3 py-1.5 font-[family-name:var(--font-mono)] text-[9px] text-slate-500 backdrop-blur-xl">
-                6 assets
+                1 assets
               </div>
             </div>
 
@@ -767,29 +818,6 @@ export default function DashboardPage() {
                       <span className="font-[family-name:var(--font-mono)] text-[8px] uppercase tracking-[0.12em] text-slate-600">
                         Load
                       </span>
-
-                      <span
-                        className={`font-[family-name:var(--font-mono)] text-[10px] font-medium ${
-                          machine.status === "fault"
-                            ? "text-rose-400"
-                            : "text-slate-300"
-                        }`}
-                      >
-                        {machine.load}%
-                      </span>
-                    </div>
-
-                    <div className="h-1.5 overflow-hidden rounded-full bg-white/[0.05]">
-                      <div
-                        className={`h-full rounded-full transition-all duration-700 ${
-                          machine.status === "running"
-                            ? "bg-gradient-to-r from-sky-500 to-cyan-300 shadow-[0_0_8px_rgba(56,189,248,0.45)]"
-                            : machine.status === "warning"
-                              ? "bg-gradient-to-r from-amber-500 to-amber-300 shadow-[0_0_8px_rgba(251,191,36,0.4)]"
-                              : "bg-gradient-to-r from-rose-600 to-rose-400"
-                        }`}
-                        style={{ width: `${machine.load}%` }}
-                      />
                     </div>
                   </div>
                 </div>
@@ -1074,7 +1102,7 @@ export default function DashboardPage() {
               <span className="h-1.5 w-1.5 rounded-full bg-emerald-400 shadow-[0_0_7px_rgba(52,211,153,0.6)]" />
 
               <span className="font-[family-name:var(--font-mono)] text-[8px] uppercase tracking-[0.14em] text-slate-600">
-                248 sensors online
+                {[temperature, vibration, irSensor].filter(Boolean).length} sensors online
               </span>
             </div>
 
