@@ -1,7 +1,10 @@
 import paho.mqtt.client as mqtt
+
 from app.database.database import SessionLocal
 from app.models.machine import Machine
-from app.models.sensor import SensorReading
+from app.models.sensor import SensorReading, Sensor
+from app.alerts.service import evaluate_sensor_reading
+
 
 MQTT_BROKER = "127.0.0.1"
 MQTT_PORT = 1883
@@ -42,9 +45,13 @@ def on_message(client, userdata, msg):
     db = SessionLocal()
 
     try:
+        # ---------------------------------------------------------
+        # Save incoming sensor reading
+        # ---------------------------------------------------------
+
         reading = SensorReading(
             sensor_id=sensor_id,
-            value=value
+            value=value,
         )
 
         db.add(reading)
@@ -52,9 +59,36 @@ def on_message(client, userdata, msg):
         db.refresh(reading)
 
         print(
-            f"Saved → Sensor {sensor_id} | "
+            f"Saved -> Sensor {sensor_id} | "
             f"Value {value} | Reading ID {reading.id}"
         )
+
+        # ---------------------------------------------------------
+        # Evaluate incoming IoT telemetry for alert conditions
+        # ---------------------------------------------------------
+
+        sensor = (
+            db.query(Sensor)
+            .filter(Sensor.id == sensor_id)
+            .first()
+        )
+
+        if sensor:
+            alert = evaluate_sensor_reading(
+                db=db,
+                machine_id=sensor.machine_id,
+                sensor_type=sensor.sensor_type,
+                value=value,
+            )
+
+            if alert:
+                print(
+                    f"ALERT -> {alert.alert_type} | "
+                    f"Machine {sensor.machine_id} | "
+                    f"Severity {alert.severity}"
+                )
+        else:
+            print(f"Sensor {sensor_id} not found in database")
 
     except Exception as exc:
         db.rollback()
@@ -67,13 +101,17 @@ def on_message(client, userdata, msg):
 def start_mqtt_subscriber():
     client = mqtt.Client(
         mqtt.CallbackAPIVersion.VERSION2,
-        client_id="PackPilot-Backend"
+        client_id="PackPilot-Backend",
     )
 
     client.on_connect = on_connect
     client.on_message = on_message
 
-    client.connect(MQTT_BROKER, MQTT_PORT, 60)
+    client.connect(
+        MQTT_BROKER,
+        MQTT_PORT,
+        60,
+    )
 
     print("Starting PackPilot MQTT subscriber...")
 

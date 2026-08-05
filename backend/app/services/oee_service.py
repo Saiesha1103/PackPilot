@@ -1,6 +1,7 @@
 from sqlalchemy.orm import Session
 
 from app.models.oee import OEERecord
+from app.alerts.service import evaluate_oee
 
 
 def calculate_oee(data, db: Session):
@@ -41,8 +42,19 @@ def calculate_oee(data, db: Session):
 
     db.add(db_record)
     db.commit()
+    db.refresh(db_record)
+
+    # Evaluate calculated OEE against engineering threshold.
+    # Current OEE module represents Machine 1 / primary packaging line.
+    evaluate_oee(
+        db=db,
+        machine_id=1,
+        oee=result["oee"],
+    )
 
     return result
+
+
 def get_oee_history(db: Session, limit: int = 20):
     return (
         db.query(OEERecord)

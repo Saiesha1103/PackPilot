@@ -1,6 +1,5 @@
 "use client";
-
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import {
   AlertTriangle,
@@ -20,6 +19,7 @@ type AlertState = "active" | "acknowledged";
 
 type Incident = {
   id: string;
+  apiId: number;
   title: string;
   machineId: string;
   line: string;
@@ -31,6 +31,15 @@ type Incident = {
   duration: string;
   state: AlertState;
 };
+type AlertApiRecord = {
+  id: number;
+  machine_id: number;
+  alert_type: string;
+  message: string;
+  severity: string;
+  timestamp: string;
+  status: string;
+};
 
 type HistoryItem = {
   id: string;
@@ -41,172 +50,6 @@ type HistoryItem = {
   duration: string;
   status: "Resolved" | "Acknowledged" | "Auto-cleared";
 };
-
-const initialIncidents: Incident[] = [
-  {
-    id: "ALT-2401",
-    title: "Bearing Temperature Critical",
-    machineId: "SU-03",
-    line: "Line 1 — Packaging",
-    source: "Bearing Temperature",
-    reading: "92.6 °C",
-    threshold: "85 °C",
-    severity: "critical",
-    timestamp: "14:32:18",
-    duration: "18m",
-    state: "active",
-  },
-  {
-    id: "ALT-2402",
-    title: "Motor Current High",
-    machineId: "CP-02",
-    line: "Line 2 — Packaging",
-    source: "Motor Current",
-    reading: "14.8 A",
-    threshold: "14.0 A",
-    severity: "warning",
-    timestamp: "14:39:42",
-    duration: "11m",
-    state: "active",
-  },
-  {
-    id: "ALT-2403",
-    title: "Excessive Vibration",
-    machineId: "CV-07",
-    line: "Line 3 — Conveyance",
-    source: "Drive Vibration",
-    reading: "0.091 g",
-    threshold: "0.075 g",
-    severity: "critical",
-    timestamp: "14:44:09",
-    duration: "7m",
-    state: "active",
-  },
-  {
-    id: "ALT-2404",
-    title: "Conveyor Speed Deviation",
-    machineId: "CV-04",
-    line: "Line 1 — Conveyance",
-    source: "Encoder Speed",
-    reading: "87.4%",
-    threshold: "≥ 92%",
-    severity: "warning",
-    timestamp: "14:46:27",
-    duration: "5m",
-    state: "active",
-  },
-  {
-    id: "ALT-2405",
-    title: "Hydraulic Pressure Warning",
-    machineId: "DC-01",
-    line: "Line 2 — Forming",
-    source: "Hydraulic Pressure",
-    reading: "5.7 bar",
-    threshold: "≥ 6.0 bar",
-    severity: "warning",
-    timestamp: "14:48:53",
-    duration: "3m",
-    state: "acknowledged",
-  },
-  {
-    id: "ALT-2406",
-    title: "Carton Former Cycle Delay",
-    machineId: "CF-02",
-    line: "Line 2 — Forming",
-    source: "Cycle Time",
-    reading: "4.8 s",
-    threshold: "≤ 4.2 s",
-    severity: "info",
-    timestamp: "14:50:11",
-    duration: "2m",
-    state: "active",
-  },
-];
-
-const history: HistoryItem[] = [
-  {
-    id: "ALT-2398",
-    time: "13:52",
-    machine: "LS-01",
-    event: "Label sensor obstruction",
-    severity: "warning",
-    duration: "06m 14s",
-    status: "Resolved",
-  },
-  {
-    id: "ALT-2397",
-    time: "13:31",
-    machine: "CF-01",
-    event: "Vacuum pressure deviation",
-    severity: "warning",
-    duration: "03m 42s",
-    status: "Auto-cleared",
-  },
-  {
-    id: "ALT-2396",
-    time: "12:48",
-    machine: "SU-02",
-    event: "Seal temperature high",
-    severity: "critical",
-    duration: "18m 06s",
-    status: "Resolved",
-  },
-  {
-    id: "ALT-2395",
-    time: "12:16",
-    machine: "CV-03",
-    event: "Drive vibration elevated",
-    severity: "warning",
-    duration: "09m 28s",
-    status: "Acknowledged",
-  },
-  {
-    id: "ALT-2394",
-    time: "11:44",
-    machine: "CP-01",
-    event: "Packer cycle synchronization",
-    severity: "info",
-    duration: "02m 17s",
-    status: "Auto-cleared",
-  },
-  {
-    id: "ALT-2393",
-    time: "11:03",
-    machine: "DC-02",
-    event: "Hydraulic pressure loss",
-    severity: "critical",
-    duration: "21m 33s",
-    status: "Resolved",
-  },
-];
-
-const timeline = [
-  {
-    time: "14:50",
-    text: "CF-02 cycle delay detected",
-    severity: "info" as Severity,
-  },
-  {
-    time: "14:48",
-    text: "DC-01 pressure alert acknowledged",
-    severity: "warning" as Severity,
-  },
-  {
-    time: "14:46",
-    text: "CV-04 speed deviation detected",
-    severity: "warning" as Severity,
-  },
-  {
-    time: "14:44",
-    text: "CV-07 vibration entered critical range",
-    severity: "critical" as Severity,
-  },
-  {
-    time: "14:32",
-    text: "SU-03 temperature threshold exceeded",
-    severity: "critical" as Severity,
-  },
-];
 
 function severityText(severity: Severity) {
   if (severity === "critical") return "text-rose-300";
@@ -237,16 +80,109 @@ function severityBadge(severity: Severity) {
 
   return "border-sky-400/20 bg-sky-400/[0.08] text-sky-300";
 }
+function mapApiAlert(alert: AlertApiRecord): Incident {
+  const severity: Severity =
+    alert.severity.toLowerCase() === "critical"
+      ? "critical"
+      : alert.severity.toLowerCase() === "high" ||
+          alert.severity.toLowerCase() === "medium"
+        ? "warning"
+        : "info";
+
+  return {
+    id: `ALT-${String(alert.id).padStart(4, "0")}`,
+    apiId: alert.id,
+    title: alert.alert_type,
+    machineId: String(alert.machine_id),
+    line: "Production Line",
+    source: alert.alert_type,
+    reading: alert.message,
+    threshold: "Engineering threshold",
+    severity,
+    timestamp: new Date(alert.timestamp).toLocaleTimeString([], {
+      hour: "2-digit",
+      minute: "2-digit",
+      second: "2-digit",
+    }),
+    duration: "Live",
+    state: alert.status.toLowerCase() === "active" ? "active" : "acknowledged",
+  };
+}
 
 export default function AlertsPage() {
-  const [incidents, setIncidents] = useState<Incident[]>(initialIncidents);
+  const [incidents, setIncidents] = useState<Incident[]>([]);
+  const [allAlerts, setAllAlerts] = useState<AlertApiRecord[]>([]);
+  const [alertsLoading, setAlertsLoading] = useState(true);
 
   const [filter, setFilter] = useState<
     "all" | "critical" | "warning" | "acknowledged"
   >("all");
 
   const [search, setSearch] = useState("");
+  useEffect(() => {
+    async function fetchAlerts() {
+      try {
+        const response = await fetch("http://127.0.0.1:8000/alerts/");
 
+        if (!response.ok) {
+          throw new Error(`Failed to fetch alerts: ${response.status}`);
+        }
+        const data: AlertApiRecord[] = await response.json();
+
+        setAllAlerts(data);
+
+        setIncidents(
+          data.filter((alert) => alert.status === "Active").map(mapApiAlert),
+        );
+      } catch (error) {
+        console.error("Failed to load alerts:", error);
+      } finally {
+        setAlertsLoading(false);
+      }
+    }
+
+    fetchAlerts();
+
+    const interval = setInterval(fetchAlerts, 5000);
+
+    return () => clearInterval(interval);
+  }, []);
+  const history = useMemo<HistoryItem[]>(() => {
+    return allAlerts
+      .filter((alert) => alert.status === "Resolved")
+      .map((alert) => {
+        const date = new Date(alert.timestamp);
+
+        const severity: Severity =
+          alert.severity.toLowerCase() === "critical"
+            ? "critical"
+            : alert.severity.toLowerCase() === "high" ||
+                alert.severity.toLowerCase() === "medium"
+              ? "warning"
+              : "info";
+
+        return {
+          id: `ALT-${String(alert.id).padStart(4, "0")}`,
+          time: date.toLocaleTimeString([], {
+            hour: "2-digit",
+            minute: "2-digit",
+          }),
+          machine: `Machine ${alert.machine_id}`,
+          event: alert.alert_type,
+          severity,
+          duration: "—",
+          status: "Resolved",
+        };
+      });
+  }, [allAlerts]);
+
+  const timeline = useMemo(() => {
+    return incidents.slice(0, 5).map((incident) => ({
+      time: incident.timestamp,
+      text: `${incident.machineId} · ${incident.title}`,
+      severity: incident.severity,
+    }));
+  }, [incidents]);
   const filteredIncidents = useMemo(() => {
     return incidents.filter((incident) => {
       const matchesFilter =
@@ -294,14 +230,30 @@ export default function AlertsPage() {
   const warningDegrees =
     totalIncidents > 0 ? (warningCount / totalIncidents) * 360 : 0;
 
-  const acknowledgeIncident = (id: string) => {
-    setIncidents((current) =>
-      current.map((incident) =>
-        incident.id === id ? { ...incident, state: "acknowledged" } : incident,
-      ),
-    );
-  };
+  const acknowledgeIncident = async (incident: Incident) => {
+    try {
+      const response = await fetch(
+        `http://127.0.0.1:8000/alerts/${incident.apiId}/resolve`,
+        {
+          method: "PATCH",
+        },
+      );
 
+      if (!response.ok) {
+        throw new Error(`Failed to resolve alert: ${response.status}`);
+      }
+
+      setIncidents((current) =>
+        current.map((item) =>
+          item.apiId === incident.apiId
+            ? { ...item, state: "acknowledged" }
+            : item,
+        ),
+      );
+    } catch (error) {
+      console.error("Failed to resolve alert:", error);
+    }
+  };
   return (
     <div className="relative min-h-full overflow-hidden bg-[#040810]">
       {/* ambient dashboard lighting */}
@@ -669,7 +621,7 @@ export default function AlertsPage() {
                           {!acknowledged && (
                             <button
                               type="button"
-                              onClick={() => acknowledgeIncident(incident.id)}
+                              onClick={() => acknowledgeIncident(incident)}
                               className="rounded-xl border border-emerald-400/15 bg-emerald-400/[0.055] px-3 py-2 font-[family-name:var(--font-mono)] text-[8px] font-semibold uppercase tracking-[0.1em] text-emerald-300 transition hover:border-emerald-400/30 hover:bg-emerald-400/[0.09]"
                             >
                               Acknowledge
@@ -935,7 +887,10 @@ export default function AlertsPage() {
                   </span>
 
                   <span className="font-[family-name:var(--font-mono)] text-[8px] text-emerald-300">
-                    {Math.round((acknowledgedCount / incidents.length) * 100)}%
+                    {incidents.length > 0
+                      ? Math.round((acknowledgedCount / incidents.length) * 100)
+                      : 0}
+                    %
                   </span>
                 </div>
 
@@ -943,7 +898,11 @@ export default function AlertsPage() {
                   <div
                     className="h-full rounded-full bg-gradient-to-r from-emerald-500 to-emerald-300 shadow-[0_0_10px_rgba(52,211,153,0.35)] transition-all duration-500"
                     style={{
-                      width: `${(acknowledgedCount / incidents.length) * 100}%`,
+                      width: `${
+                        incidents.length > 0
+                          ? (acknowledgedCount / incidents.length) * 100
+                          : 0
+                      }%`,
                     }}
                   />
                 </div>

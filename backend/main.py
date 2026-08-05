@@ -11,7 +11,8 @@ from app.api.downtime_routes import router as downtime_router
 from app.api.changeover_routes import (
     router as changeover_router
 )
-
+from app.pfmea.router import router as pfmea_router
+from app.api.alert_routes import router as alert_router
 app = FastAPI(
     title="PackPilot API",
     description="Industry 4.0 Manufacturing Operations Platform",
@@ -41,6 +42,8 @@ app.include_router(dashboard_router)
 app.include_router(oee_router)
 app.include_router(downtime_router)
 app.include_router(changeover_router)
+app.include_router(pfmea_router)
+app.include_router(alert_router)
 
 @app.get("/")
 def root():

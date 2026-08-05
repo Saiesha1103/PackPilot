@@ -12,6 +12,7 @@ import {
   FileBarChart2,
   ShieldCheck,
   Settings,
+  Repeat,
   X,
 } from "lucide-react";
 
@@ -25,6 +26,12 @@ const navItems = [
   { label: "Reports", href: "/dashboard/reports", icon: FileBarChart2 },
   { label: "PFMEA", href: "/dashboard/pfmea", icon: ShieldCheck },
   { label: "Settings", href: "/dashboard/settings", icon: Settings },
+
+  {
+    label: "Changeover",
+    href: "/dashboard/changeover",
+    icon: Repeat,
+  },
 ];
 
 interface SidebarProps {

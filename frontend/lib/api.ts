@@ -233,3 +233,99 @@ export async function getDowntimeByMachine(): Promise<
 
   return response.json();
 }
+export type Changeover = {
+  id: number;
+  machine_id: number;
+  from_product: string;
+  to_product: string;
+  start_time: string;
+  end_time: string | null;
+  duration_minutes: number | null;
+};
+
+export type ChangeoverAnalytics = {
+  total_changeovers: number;
+  average_duration_minutes: number;
+  total_changeover_minutes: number;
+};
+
+export async function getChangeovers(): Promise<Changeover[]> {
+  const response = await fetch(
+    `${API_BASE_URL}/changeover`,
+    {
+      cache: "no-store",
+    }
+  );
+
+  if (!response.ok) {
+    throw new Error(
+      "Failed to fetch changeovers"
+    );
+  }
+
+  return response.json();
+}
+
+export async function getChangeoverAnalytics(): Promise<ChangeoverAnalytics> {
+  const response = await fetch(
+    `${API_BASE_URL}/changeover/analytics`,
+    {
+      cache: "no-store",
+    }
+  );
+
+  if (!response.ok) {
+    throw new Error(
+      "Failed to fetch changeover analytics"
+    );
+  }
+
+  return response.json();
+}
+export async function createChangeover(
+  data: {
+    machine_id: number;
+    from_product: string;
+    to_product: string;
+  }
+): Promise<Changeover> {
+  const response = await fetch(
+    `${API_BASE_URL}/changeover/`,
+    {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify(data),
+    }
+  );
+
+  if (!response.ok) {
+    throw new Error(
+      "Failed to create changeover"
+    );
+  }
+
+  return response.json();
+}
+export async function closeChangeover(
+  changeoverId: number
+): Promise<Changeover> {
+  const response = await fetch(
+    `${API_BASE_URL}/changeover/${changeoverId}/close`,
+    {
+      method: "PUT",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({}),
+      cache: "no-store",
+    }
+  );
+
+  if (!response.ok) {
+    throw new Error("Failed to close changeover");
+  }
+
+  return response.json();
+}

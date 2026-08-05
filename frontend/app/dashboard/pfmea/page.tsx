@@ -1,6 +1,5 @@
 "use client";
-
-import { useMemo, useState, type ReactNode } from "react";
+import { useEffect, useMemo, useState, type ReactNode } from "react";
 import {
   AlertTriangle,
   ShieldAlert,
@@ -47,6 +46,38 @@ interface PFMEARecord {
   owner: string;
   actionStatus: ActionStatus;
 }
+interface PFMEAApiRecord {
+  id: number;
+  machine_id: number;
+  failure_mode: string;
+  failure_effect: string | null;
+  severity: number;
+  occurrence: number;
+  detection: number;
+  rpn: number;
+  risk_level: RiskLevel;
+}
+const MACHINE_PROCESS_MAP: Record<number, ProcessStep> = {
+  1: "Product Loading",
+  2: "Carton Feeding",
+  3: "Sealing",
+  4: "Case Packing",
+};
+function mapApiRecord(record: PFMEAApiRecord): PFMEARecord {
+  return {
+    id: `PFM-${String(record.id).padStart(3, "0")}`,
+    process: MACHINE_PROCESS_MAP[record.machine_id] ?? "Coding & Inspection",
+    failureMode: record.failure_mode,
+    effect: record.failure_effect ?? "—",
+    cause: "—",
+    severity: record.severity,
+    occurrence: record.occurrence,
+    detection: record.detection,
+    recommendedAction: "Engineering review required",
+    owner: "Engineering",
+    actionStatus: "Open",
+  };
+}
 
 /* ------------------------------------------------------------------ */
 /* Constants + helpers                                                 */
@@ -68,11 +99,12 @@ function calcRPN(s: number, o: number, d: number): number {
 }
 
 function classifyRisk(rpn: number): RiskLevel {
-  if (rpn >= 250) return "Critical";
-  if (rpn >= 150) return "High";
-  if (rpn >= 80) return "Medium";
+  if (rpn >= 400) return "Critical";
+  if (rpn >= 200) return "High";
+  if (rpn >= 100) return "Medium";
   return "Low";
 }
+
 
 const RISK_STYLES: Record<
   RiskLevel,
@@ -108,7 +140,10 @@ const RISK_STYLES: Record<
   },
 };
 
-const STATUS_STYLES: Record<ActionStatus, { text: string; bg: string; border: string; icon: ReactNode }> = {
+const STATUS_STYLES: Record<
+  ActionStatus,
+  { text: string; bg: string; border: string; icon: ReactNode }
+> = {
   Open: {
     text: "text-amber-300",
     bg: "bg-amber-500/10",
@@ -144,7 +179,7 @@ const INITIAL_RECORDS: PFMEARecord[] = [
     occurrence: 8,
     detection: 5,
     recommendedAction:
-  "Introduce vacuum threshold interlock and scheduled suction-cup inspection.",
+      "Introduce vacuum threshold interlock and scheduled suction-cup inspection.",
     owner: "R. Mehta",
     actionStatus: "In Progress",
   },
@@ -170,7 +205,8 @@ const INITIAL_RECORDS: PFMEARecord[] = [
     severity: 9,
     occurrence: 4,
     detection: 7,
-    recommendedAction: "Review and update printer firmware, implement operator training.",
+    recommendedAction:
+      "Review and update printer firmware, implement operator training.",
     owner: "A. Verma",
     actionStatus: "Open",
   },
@@ -323,7 +359,6 @@ const INITIAL_RECORDS: PFMEARecord[] = [
 /* Static visualization data                                           */
 /* ------------------------------------------------------------------ */
 
-
 const PROCESS_RISK_EXPOSURE: { process: ProcessStep; avgRpn: number }[] = [
   { process: "Carton Forming", avgRpn: 320 },
   { process: "Sealing", avgRpn: 288 },
@@ -366,12 +401,17 @@ function StatusBadge({ status }: { status: ActionStatus }) {
 /* ------------------------------------------------------------------ */
 
 export default function PFMEAPage() {
-  const [records, setRecords] = useState<PFMEARecord[]>(INITIAL_RECORDS);
+  const [records, setRecords] = useState<PFMEARecord[]>([]);
+  const [loading, setLoading] = useState(true);
 
   const [activeTab, setActiveTab] = useState<"All" | RiskLevel>("All");
   const [search, setSearch] = useState("");
-  const [processFilter, setProcessFilter] = useState<"All Processes" | ProcessStep>("All Processes");
-  const [statusFilter, setStatusFilter] = useState<"All Status" | ActionStatus>("All Status");
+  const [processFilter, setProcessFilter] = useState<
+    "All Processes" | ProcessStep
+  >("All Processes");
+  const [statusFilter, setStatusFilter] = useState<"All Status" | ActionStatus>(
+    "All Status",
+  );
 
   const [isModalOpen, setIsModalOpen] = useState(false);
 
@@ -386,7 +426,35 @@ export default function PFMEAPage() {
     owner: "",
     recommendedAction: "",
   });
+useEffect(() => {
+  async function fetchPFMEA() {
+    try {
+      setLoading(true);
 
+      const response = await fetch("http://127.0.0.1:8000/pfmea/");
+
+      if (!response.ok) {
+        throw new Error(`Failed to fetch PFMEA: ${response.status}`);
+      }
+
+      const data: PFMEAApiRecord[] = await response.json();
+
+      console.log("PFMEA API DATA:", data);
+
+      const mapped = data.map(mapApiRecord);
+
+      console.log("PFMEA MAPPED DATA:", mapped);
+
+      setRecords(mapped);
+    } catch (error) {
+      console.error("PFMEA fetch error:", error);
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  fetchPFMEA();
+}, []);
   const formRpn = calcRPN(form.severity, form.occurrence, form.detection);
   const formRisk = classifyRisk(formRpn);
 
@@ -396,17 +464,20 @@ export default function PFMEAPage() {
         const rpn = calcRPN(r.severity, r.occurrence, r.detection);
         return { ...r, rpn, risk: classifyRisk(rpn) };
       }),
-    [records]
+    [records],
   );
 
   const filtered = useMemo(() => {
     return enriched.filter((r) => {
       if (activeTab !== "All" && r.risk !== activeTab) return false;
-      if (processFilter !== "All Processes" && r.process !== processFilter) return false;
-      if (statusFilter !== "All Status" && r.actionStatus !== statusFilter) return false;
+      if (processFilter !== "All Processes" && r.process !== processFilter)
+        return false;
+      if (statusFilter !== "All Status" && r.actionStatus !== statusFilter)
+        return false;
       if (search.trim()) {
         const q = search.trim().toLowerCase();
-        const haystack = `${r.id} ${r.process} ${r.failureMode} ${r.effect} ${r.cause} ${r.owner}`.toLowerCase();
+        const haystack =
+          `${r.id} ${r.process} ${r.failureMode} ${r.effect} ${r.cause} ${r.owner}`.toLowerCase();
         if (!haystack.includes(q)) return false;
       }
       return true;
@@ -414,55 +485,76 @@ export default function PFMEAPage() {
   }, [enriched, activeTab, processFilter, statusFilter, search]);
 
   const tabCounts = useMemo(() => {
-    const counts: Record<"All" | RiskLevel, number> = { All: enriched.length, Critical: 0, High: 0, Medium: 0, Low: 0 };
+    const counts: Record<"All" | RiskLevel, number> = {
+      All: enriched.length,
+      Critical: 0,
+      High: 0,
+      Medium: 0,
+      Low: 0,
+    };
     enriched.forEach((r) => {
       counts[r.risk] += 1;
     });
     return counts;
   }, [enriched]);
   const riskDistribution = useMemo(() => {
-  const counts: Record<RiskLevel, number> = {
-    Critical: 0,
-    High: 0,
-    Medium: 0,
-    Low: 0,
-  };
+    const counts: Record<RiskLevel, number> = {
+      Critical: 0,
+      High: 0,
+      Medium: 0,
+      Low: 0,
+    };
 
-  enriched.forEach((record) => {
-    counts[record.risk] += 1;
-  });
+    enriched.forEach((record) => {
+      counts[record.risk] += 1;
+    });
 
-  return (["Critical", "High", "Medium", "Low"] as RiskLevel[]).map(
-    (level) => ({
-      level,
-      count: counts[level],
-    })
-  );
-}, [enriched]);
+    return (["Critical", "High", "Medium", "Low"] as RiskLevel[]).map(
+      (level) => ({
+        level,
+        count: counts[level],
+      }),
+    );
+  }, [enriched]);
 
-  function handleAddFailureMode() {
-    if (!form.failureMode.trim() || !form.owner.trim()) return;
-    const nextIndex =
-  Math.max(
-    0,
-    ...records.map((r) => Number(r.id.replace("PFM-", "")))
-  ) + 1;
-    const newRecord: PFMEARecord = {
-      id: `PFM-${String(nextIndex).padStart(3, "0")}`,
+ async function handleAddFailureMode() {
+  if (!form.failureMode.trim() || !form.owner.trim()) return;
+
+  try {
+    const response = await fetch("http://127.0.0.1:8000/pfmea/", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        machine_id: 1,
+        failure_mode: form.failureMode.trim(),
+        failure_effect: form.effect.trim() || null,
+        severity: form.severity,
+        occurrence: form.occurrence,
+        detection: form.detection,
+      }),
+    });
+
+    if (!response.ok) {
+      throw new Error(`Failed to create PFMEA record: ${response.status}`);
+    }
+
+    const created: PFMEAApiRecord = await response.json();
+
+    const mappedRecord: PFMEARecord = {
+      ...mapApiRecord(created),
       process: form.process,
-      failureMode: form.failureMode.trim(),
-      effect: form.effect.trim() || "—",
       cause: form.cause.trim() || "—",
-      severity: form.severity,
-      occurrence: form.occurrence,
-      detection: form.detection,
-       recommendedAction:
-    form.recommendedAction.trim() || "—",
+      recommendedAction: form.recommendedAction.trim() || "—",
       owner: form.owner.trim(),
       actionStatus: "Open",
     };
-    setRecords((prev) => [newRecord, ...prev]);
+
+    setRecords((prev) => [mappedRecord, ...prev]);
+
     setIsModalOpen(false);
+
     setForm({
       process: PROCESS_STEPS[0],
       failureMode: "",
@@ -474,35 +566,41 @@ export default function PFMEAPage() {
       owner: "",
       recommendedAction: "",
     });
+  } catch (error) {
+    console.error("PFMEA create error:", error);
   }
-
+}
   /* ---------------- donut chart geometry ---------------- */
-  const total = riskDistribution.reduce((a, b) => a + b.count, 0);
-  const radius = 70;
-  const circumference = 2 * Math.PI * radius;
-  let cumulative = 0;
-  const donutSegments = riskDistribution.map((seg) => {
-    const fraction = seg.count / total;
-    const length = fraction * circumference;
-    const offset = -cumulative;
-    cumulative += length;
-    return { ...seg, length, offset, fraction };
-  });
+ const total = riskDistribution.reduce((a, b) => a + b.count, 0);
+const radius = 70;
+const circumference = 2 * Math.PI * radius;
+let cumulative = 0;
+
+const donutSegments = riskDistribution.map((seg) => {
+  const fraction = total > 0 ? seg.count / total : 0;
+  const length = fraction * circumference;
+  const offset = -cumulative;
+
+  cumulative += length;
+
+  return {
+    ...seg,
+    length,
+    offset,
+    fraction,
+  };
+});
   const openActionsCount = useMemo(() => {
-  return records.filter(
-    (record) => record.actionStatus !== "Completed"
-  ).length;
-}, [records]);
-const averageRpn = useMemo(() => {
-  if (enriched.length === 0) return 0;
+    return records.filter((record) => record.actionStatus !== "Completed")
+      .length;
+  }, [records]);
+  const averageRpn = useMemo(() => {
+    if (enriched.length === 0) return 0;
 
-  const totalRpn = enriched.reduce(
-    (sum, record) => sum + record.rpn,
-    0
-  );
+    const totalRpn = enriched.reduce((sum, record) => sum + record.rpn, 0);
 
-  return Math.round(totalRpn / enriched.length);
-}, [enriched]);
+    return Math.round(totalRpn / enriched.length);
+  }, [enriched]);
 
   const maxExposure = Math.max(...PROCESS_RISK_EXPOSURE.map((p) => p.avgRpn));
 
@@ -521,8 +619,8 @@ const averageRpn = useMemo(() => {
               PFMEA Workspace
             </h1>
             <p className="mt-2 max-w-2xl text-sm leading-relaxed text-white/50">
-              Identify process failure modes, quantify manufacturing risk and track mitigation actions across
-              packaging operations.
+              Identify process failure modes, quantify manufacturing risk and
+              track mitigation actions across packaging operations.
             </p>
           </div>
           <div className="flex items-center gap-2 self-start rounded-full border border-emerald-500/25 bg-emerald-500/10 px-3.5 py-1.5 sm:self-auto">
@@ -582,14 +680,23 @@ const averageRpn = useMemo(() => {
                 <h2 className="font-[family-name:var(--font-display)] text-base font-semibold text-white">
                   Risk Priority Overview
                 </h2>
-                <p className="mt-1 text-xs text-white/40">Distribution of failure modes by risk classification</p>
+                <p className="mt-1 text-xs text-white/40">
+                  Distribution of failure modes by risk classification
+                </p>
               </div>
             </div>
 
             <div className="flex flex-col items-center gap-8 sm:flex-row sm:items-center sm:justify-around">
               <div className="relative flex h-[200px] w-[200px] shrink-0 items-center justify-center">
                 <svg viewBox="0 0 200 200" className="h-full w-full -rotate-0">
-                  <circle cx="100" cy="100" r={radius} fill="none" stroke="rgba(255,255,255,0.06)" strokeWidth="18" />
+                  <circle
+                    cx="100"
+                    cy="100"
+                    r={radius}
+                    fill="none"
+                    stroke="rgba(255,255,255,0.06)"
+                    strokeWidth="18"
+                  />
                   {donutSegments.map((seg) => {
                     const colorMap: Record<RiskLevel, string> = {
                       Critical: "#fb7185",
@@ -610,7 +717,9 @@ const averageRpn = useMemo(() => {
                         strokeDashoffset={seg.offset}
                         transform="rotate(-90 100 100)"
                         strokeLinecap="butt"
-                        style={{ filter: `drop-shadow(0 0 6px ${colorMap[seg.level]}55)` }}
+                        style={{
+                          filter: `drop-shadow(0 0 6px ${colorMap[seg.level]}55)`,
+                        }}
                       />
                     );
                   })}
@@ -656,13 +765,24 @@ const averageRpn = useMemo(() => {
 
           {/* RIGHT: PFMEA Health */}
           <div className="rounded-[20px] border border-white/[0.08] bg-[#090f18]/90 p-5 sm:p-6">
-            <h2 className="font-[family-name:var(--font-display)] text-base font-semibold text-white">PFMEA Health</h2>
-            <p className="mt-1 text-xs text-white/40">Mitigation velocity and outstanding exposure</p>
+            <h2 className="font-[family-name:var(--font-display)] text-base font-semibold text-white">
+              PFMEA Health
+            </h2>
+            <p className="mt-1 text-xs text-white/40">
+              Mitigation velocity and outstanding exposure
+            </p>
 
             <div className="mt-5 flex items-center gap-5">
               <div className="relative flex h-[104px] w-[104px] shrink-0 items-center justify-center">
                 <svg viewBox="0 0 120 120" className="h-full w-full -rotate-90">
-                  <circle cx="60" cy="60" r="50" fill="none" stroke="rgba(255,255,255,0.06)" strokeWidth="10" />
+                  <circle
+                    cx="60"
+                    cy="60"
+                    r="50"
+                    fill="none"
+                    stroke="rgba(255,255,255,0.06)"
+                    strokeWidth="10"
+                  />
                   <circle
                     cx="60"
                     cy="60"
@@ -673,24 +793,40 @@ const averageRpn = useMemo(() => {
                     strokeLinecap="round"
                     strokeDasharray={`${2 * Math.PI * 50}`}
                     strokeDashoffset={`${2 * Math.PI * 50 * (1 - 0.83)}`}
-                    style={{ filter: "drop-shadow(0 0 6px rgba(52,211,153,0.45))" }}
+                    style={{
+                      filter: "drop-shadow(0 0 6px rgba(52,211,153,0.45))",
+                    }}
                   />
                 </svg>
                 <div className="absolute flex flex-col items-center">
-                  <span className="font-[family-name:var(--font-display)] text-xl font-semibold text-white">83%</span>
+                  <span className="font-[family-name:var(--font-display)] text-xl font-semibold text-white">
+                    83%
+                  </span>
                 </div>
               </div>
               <div>
                 <div className="font-[family-name:var(--font-mono)] text-[11px] uppercase tracking-widest text-white/40">
                   On-Time Closure
                 </div>
-                <div className="mt-1 text-sm text-white/60">Actions closed within target window</div>
+                <div className="mt-1 text-sm text-white/60">
+                  Actions closed within target window
+                </div>
               </div>
             </div>
 
             <div className="mt-5 grid grid-cols-3 gap-2.5">
-              <MiniStat label="Critical" value="4" accent="rose" />
-              <MiniStat label="Open" value="9" accent="amber" />
+              <MiniStat
+                label="Critical"
+                value={String(tabCounts.Critical)}
+                accent="rose"
+              />
+
+              <MiniStat
+                label="Open"
+                value={String(openActionsCount)}
+                accent="amber"
+              />
+
               <MiniStat label="Overdue" value="3" accent="rose" />
             </div>
 
@@ -703,9 +839,13 @@ const averageRpn = useMemo(() => {
                 <span className="font-[family-name:var(--font-display)] text-lg font-semibold text-white">
                   Carton Forming
                 </span>
-                <span className="font-[family-name:var(--font-mono)] text-2xl font-bold text-rose-300">320</span>
+                <span className="font-[family-name:var(--font-mono)] text-2xl font-bold text-rose-300">
+                  320
+                </span>
               </div>
-              <div className="mt-0.5 text-[11px] text-white/40">Current RPN</div>
+              <div className="mt-0.5 text-[11px] text-white/40">
+                Current RPN
+              </div>
             </div>
           </div>
         </div>
@@ -719,7 +859,9 @@ const averageRpn = useMemo(() => {
             <h2 className="font-[family-name:var(--font-display)] text-base font-semibold text-white">
               Process Risk Comparison
             </h2>
-            <p className="mt-1 text-xs text-white/40">Average risk priority number by process step</p>
+            <p className="mt-1 text-xs text-white/40">
+              Average risk priority number by process step
+            </p>
 
             <div className="mt-6 space-y-4">
               {PROCESS_RISK_EXPOSURE.map((p) => {
@@ -729,8 +871,12 @@ const averageRpn = useMemo(() => {
                 return (
                   <div key={p.process}>
                     <div className="mb-1.5 flex items-center justify-between">
-                      <span className="text-xs font-medium text-white/70">{p.process}</span>
-                      <span className={`font-[family-name:var(--font-mono)] text-xs font-semibold ${s.text}`}>
+                      <span className="text-xs font-medium text-white/70">
+                        {p.process}
+                      </span>
+                      <span
+                        className={`font-[family-name:var(--font-mono)] text-xs font-semibold ${s.text}`}
+                      >
                         {p.avgRpn}
                       </span>
                     </div>
@@ -757,10 +903,22 @@ const averageRpn = useMemo(() => {
 
             <div className="mt-4 space-y-3.5">
               <InsightRow label="Process" value="Carton Forming" />
-              <InsightRow label="Failure Mode" value="Incomplete carton erection" />
-              <InsightRow label="Effect" value="Carton collapse during downstream product loading" />
-              <InsightRow label="Likely Cause" value="Vacuum pickup degradation / forming timing deviation" />
-              <InsightRow label="Current Controls" value="Vacuum pressure monitoring + operator inspection" />
+              <InsightRow
+                label="Failure Mode"
+                value="Incomplete carton erection"
+              />
+              <InsightRow
+                label="Effect"
+                value="Carton collapse during downstream product loading"
+              />
+              <InsightRow
+                label="Likely Cause"
+                value="Vacuum pickup degradation / forming timing deviation"
+              />
+              <InsightRow
+                label="Current Controls"
+                value="Vacuum pressure monitoring + operator inspection"
+              />
               <InsightRow
                 label="Recommended Action"
                 value="Introduce vacuum threshold interlock and scheduled suction-cup inspection."
@@ -773,19 +931,25 @@ const averageRpn = useMemo(() => {
                 <div className="font-[family-name:var(--font-mono)] text-[10px] uppercase tracking-widest text-white/40">
                   Current
                 </div>
-                <div className="font-[family-name:var(--font-mono)] text-xl font-bold text-rose-300">320</div>
+                <div className="font-[family-name:var(--font-mono)] text-xl font-bold text-rose-300">
+                  320
+                </div>
               </div>
               <ArrowRight className="h-4 w-4 text-white/30" />
               <div className="text-center">
                 <div className="font-[family-name:var(--font-mono)] text-[10px] uppercase tracking-widest text-white/40">
                   Projected
                 </div>
-                <div className="font-[family-name:var(--font-mono)] text-xl font-bold text-emerald-300">120</div>
+                <div className="font-[family-name:var(--font-mono)] text-xl font-bold text-emerald-300">
+                  120
+                </div>
               </div>
               <div className="h-8 w-px bg-white/10" />
               <div className="flex flex-col items-center gap-1 text-center">
                 <TrendingDown className="h-4 w-4 text-emerald-300" />
-                <div className="font-[family-name:var(--font-mono)] text-xs font-semibold text-emerald-300">-62.5%</div>
+                <div className="font-[family-name:var(--font-mono)] text-xs font-semibold text-emerald-300">
+                  -62.5%
+                </div>
               </div>
             </div>
           </div>
@@ -800,7 +964,9 @@ const averageRpn = useMemo(() => {
               <h2 className="font-[family-name:var(--font-display)] text-base font-semibold text-white">
                 PFMEA Register
               </h2>
-              <p className="mt-1 text-xs text-white/40">Failure mode inventory with live risk scoring</p>
+              <p className="mt-1 text-xs text-white/40">
+                Failure mode inventory with live risk scoring
+              </p>
             </div>
             <button
               onClick={() => setIsModalOpen(true)}
@@ -813,26 +979,28 @@ const averageRpn = useMemo(() => {
 
           {/* Tabs */}
           <div className="mt-5 flex flex-wrap items-center gap-2">
-            {(["All", "Critical", "High", "Medium", "Low"] as const).map((tab) => {
-              const active = activeTab === tab;
-              const s = tab !== "All" ? RISK_STYLES[tab] : null;
-              return (
-                <button
-                  key={tab}
-                  onClick={() => setActiveTab(tab)}
-                  className={`inline-flex items-center gap-1.5 rounded-full border px-3.5 py-1.5 font-[family-name:var(--font-mono)] text-[11px] font-semibold uppercase tracking-wider transition ${
-                    active
-                      ? s
-                        ? `${s.border} ${s.bg} ${s.text}`
-                        : "border-white/25 bg-white/10 text-white"
-                      : "border-white/10 bg-transparent text-white/40 hover:text-white/70"
-                  }`}
-                >
-                  {tab}
-                  <span className="opacity-60">{tabCounts[tab]}</span>
-                </button>
-              );
-            })}
+            {(["All", "Critical", "High", "Medium", "Low"] as const).map(
+              (tab) => {
+                const active = activeTab === tab;
+                const s = tab !== "All" ? RISK_STYLES[tab] : null;
+                return (
+                  <button
+                    key={tab}
+                    onClick={() => setActiveTab(tab)}
+                    className={`inline-flex items-center gap-1.5 rounded-full border px-3.5 py-1.5 font-[family-name:var(--font-mono)] text-[11px] font-semibold uppercase tracking-wider transition ${
+                      active
+                        ? s
+                          ? `${s.border} ${s.bg} ${s.text}`
+                          : "border-white/25 bg-white/10 text-white"
+                        : "border-white/10 bg-transparent text-white/40 hover:text-white/70"
+                    }`}
+                  >
+                    {tab}
+                    <span className="opacity-60">{tabCounts[tab]}</span>
+                  </button>
+                );
+              },
+            )}
           </div>
 
           {/* Filters */}
@@ -899,10 +1067,18 @@ const averageRpn = useMemo(() => {
                     <td className="whitespace-nowrap px-4 py-3 font-[family-name:var(--font-mono)] text-xs text-cyan-300/90">
                       {r.id}
                     </td>
-                    <td className="whitespace-nowrap px-4 py-3 text-xs text-white/70">{r.process}</td>
-                    <td className="min-w-[190px] px-4 py-3 text-xs text-white/80">{r.failureMode}</td>
-                    <td className="min-w-[220px] px-4 py-3 text-xs text-white/50">{r.effect}</td>
-                    <td className="min-w-[220px] px-4 py-3 text-xs text-white/50">{r.cause}</td>
+                    <td className="whitespace-nowrap px-4 py-3 text-xs text-white/70">
+                      {r.process}
+                    </td>
+                    <td className="min-w-[190px] px-4 py-3 text-xs text-white/80">
+                      {r.failureMode}
+                    </td>
+                    <td className="min-w-[220px] px-4 py-3 text-xs text-white/50">
+                      {r.effect}
+                    </td>
+                    <td className="min-w-[220px] px-4 py-3 text-xs text-white/50">
+                      {r.cause}
+                    </td>
                     <td className="px-4 py-3 text-center font-[family-name:var(--font-mono)] text-xs text-white/70">
                       {r.severity}
                     </td>
@@ -918,7 +1094,9 @@ const averageRpn = useMemo(() => {
                     <td className="whitespace-nowrap px-4 py-3">
                       <RiskBadge risk={r.risk} />
                     </td>
-                    <td className="whitespace-nowrap px-4 py-3 text-xs text-white/60">{r.owner}</td>
+                    <td className="whitespace-nowrap px-4 py-3 text-xs text-white/60">
+                      {r.owner}
+                    </td>
                     <td className="whitespace-nowrap px-4 py-3">
                       <StatusBadge status={r.actionStatus} />
                     </td>
@@ -926,7 +1104,10 @@ const averageRpn = useMemo(() => {
                 ))}
                 {filtered.length === 0 && (
                   <tr>
-                    <td colSpan={12} className="px-4 py-10 text-center text-xs text-white/30">
+                    <td
+                      colSpan={12}
+                      className="px-4 py-10 text-center text-xs text-white/30"
+                    >
                       No PFMEA records match the current filters.
                     </td>
                   </tr>
@@ -969,7 +1150,12 @@ const averageRpn = useMemo(() => {
                 <Field label="Process Step">
                   <select
                     value={form.process}
-                    onChange={(e) => setForm((f) => ({ ...f, process: e.target.value as ProcessStep }))}
+                    onChange={(e) =>
+                      setForm((f) => ({
+                        ...f,
+                        process: e.target.value as ProcessStep,
+                      }))
+                    }
                     className="w-full rounded-xl border border-white/[0.08] bg-white/[0.03] px-3 py-2.5 text-sm text-white/80 outline-none focus:border-cyan-400/40"
                   >
                     {PROCESS_STEPS.map((p) => (
@@ -983,7 +1169,9 @@ const averageRpn = useMemo(() => {
                   <input
                     type="text"
                     value={form.owner}
-                    onChange={(e) => setForm((f) => ({ ...f, owner: e.target.value }))}
+                    onChange={(e) =>
+                      setForm((f) => ({ ...f, owner: e.target.value }))
+                    }
                     placeholder="e.g. R. Mehta"
                     className="w-full rounded-xl border border-white/[0.08] bg-white/[0.03] px-3 py-2.5 text-sm text-white/80 placeholder:text-white/25 outline-none focus:border-cyan-400/40"
                   />
@@ -994,7 +1182,9 @@ const averageRpn = useMemo(() => {
                 <input
                   type="text"
                   value={form.failureMode}
-                  onChange={(e) => setForm((f) => ({ ...f, failureMode: e.target.value }))}
+                  onChange={(e) =>
+                    setForm((f) => ({ ...f, failureMode: e.target.value }))
+                  }
                   placeholder="e.g. Carton misfeed at pickup station"
                   className="w-full rounded-xl border border-white/[0.08] bg-white/[0.03] px-3 py-2.5 text-sm text-white/80 placeholder:text-white/25 outline-none focus:border-cyan-400/40"
                 />
@@ -1005,7 +1195,9 @@ const averageRpn = useMemo(() => {
                   <input
                     type="text"
                     value={form.effect}
-                    onChange={(e) => setForm((f) => ({ ...f, effect: e.target.value }))}
+                    onChange={(e) =>
+                      setForm((f) => ({ ...f, effect: e.target.value }))
+                    }
                     placeholder="Downstream impact"
                     className="w-full rounded-xl border border-white/[0.08] bg-white/[0.03] px-3 py-2.5 text-sm text-white/80 placeholder:text-white/25 outline-none focus:border-cyan-400/40"
                   />
@@ -1014,7 +1206,9 @@ const averageRpn = useMemo(() => {
                   <input
                     type="text"
                     value={form.cause}
-                    onChange={(e) => setForm((f) => ({ ...f, cause: e.target.value }))}
+                    onChange={(e) =>
+                      setForm((f) => ({ ...f, cause: e.target.value }))
+                    }
                     placeholder="Root cause"
                     className="w-full rounded-xl border border-white/[0.08] bg-white/[0.03] px-3 py-2.5 text-sm text-white/80 placeholder:text-white/25 outline-none focus:border-cyan-400/40"
                   />
@@ -1042,7 +1236,12 @@ const averageRpn = useMemo(() => {
               <Field label="Recommended Action">
                 <textarea
                   value={form.recommendedAction}
-                  onChange={(e) => setForm((f) => ({ ...f, recommendedAction: e.target.value }))}
+                  onChange={(e) =>
+                    setForm((f) => ({
+                      ...f,
+                      recommendedAction: e.target.value,
+                    }))
+                  }
                   rows={2}
                   placeholder="Proposed mitigation / control"
                   className="w-full resize-none rounded-xl border border-white/[0.08] bg-white/[0.03] px-3 py-2.5 text-sm text-white/80 placeholder:text-white/25 outline-none focus:border-cyan-400/40"
@@ -1056,13 +1255,18 @@ const averageRpn = useMemo(() => {
                     Live Calculation
                   </div>
                   <div className="mt-1 font-[family-name:var(--font-mono)] text-xs text-white/50">
-                    RPN = S ({form.severity}) × O ({form.occurrence}) × D ({form.detection})
+                    RPN = S ({form.severity}) × O ({form.occurrence}) × D (
+                    {form.detection})
                   </div>
                 </div>
                 <div className="flex items-center gap-4">
                   <div className="text-right">
-                    <div className="font-[family-name:var(--font-mono)] text-2xl font-bold text-white">{formRpn}</div>
-                    <div className="text-[10px] uppercase tracking-widest text-white/30">RPN</div>
+                    <div className="font-[family-name:var(--font-mono)] text-2xl font-bold text-white">
+                      {formRpn}
+                    </div>
+                    <div className="text-[10px] uppercase tracking-widest text-white/30">
+                      RPN
+                    </div>
                   </div>
                   <RiskBadge risk={formRisk} />
                 </div>
@@ -1123,12 +1327,18 @@ function KpiCard({
         <span className="font-[family-name:var(--font-mono)] text-[11px] font-semibold uppercase tracking-widest text-white/40">
           {label}
         </span>
-        <span className={`flex h-7 w-7 items-center justify-center rounded-lg border ${accentMap[accent]}`}>
+        <span
+          className={`flex h-7 w-7 items-center justify-center rounded-lg border ${accentMap[accent]}`}
+        >
           {icon}
         </span>
       </div>
-      <div className="mt-3 font-[family-name:var(--font-display)] text-3xl font-semibold text-white">{value}</div>
-      <div className={`mt-1.5 flex items-center gap-1 text-xs ${trendDown ? "text-emerald-300" : "text-white/40"}`}>
+      <div className="mt-3 font-[family-name:var(--font-display)] text-3xl font-semibold text-white">
+        {value}
+      </div>
+      <div
+        className={`mt-1.5 flex items-center gap-1 text-xs ${trendDown ? "text-emerald-300" : "text-white/40"}`}
+      >
         {trendDown && <TrendingDown className="h-3.5 w-3.5" />}
         <span>{sub}</span>
       </div>
@@ -1136,27 +1346,53 @@ function KpiCard({
   );
 }
 
-function MiniStat({ label, value, accent }: { label: string; value: string; accent: "rose" | "amber" | "cyan" }) {
+function MiniStat({
+  label,
+  value,
+  accent,
+}: {
+  label: string;
+  value: string;
+  accent: "rose" | "amber" | "cyan";
+}) {
   const accentMap = {
     rose: "text-rose-300 border-rose-500/25 bg-rose-500/[0.06]",
     amber: "text-amber-300 border-amber-500/25 bg-amber-500/[0.06]",
     cyan: "text-cyan-300 border-cyan-500/25 bg-cyan-500/[0.06]",
   };
   return (
-    <div className={`rounded-xl border px-2.5 py-2.5 text-center ${accentMap[accent]}`}>
-      <div className="font-[family-name:var(--font-mono)] text-lg font-bold">{value}</div>
-      <div className="mt-0.5 text-[10px] uppercase tracking-wider text-white/40">{label}</div>
+    <div
+      className={`rounded-xl border px-2.5 py-2.5 text-center ${accentMap[accent]}`}
+    >
+      <div className="font-[family-name:var(--font-mono)] text-lg font-bold">
+        {value}
+      </div>
+      <div className="mt-0.5 text-[10px] uppercase tracking-wider text-white/40">
+        {label}
+      </div>
     </div>
   );
 }
 
-function InsightRow({ label, value, emphasize }: { label: string; value: string; emphasize?: boolean }) {
+function InsightRow({
+  label,
+  value,
+  emphasize,
+}: {
+  label: string;
+  value: string;
+  emphasize?: boolean;
+}) {
   return (
     <div>
       <div className="font-[family-name:var(--font-mono)] text-[10px] uppercase tracking-widest text-white/35">
         {label}
       </div>
-      <div className={`mt-1 text-sm leading-snug ${emphasize ? "text-cyan-200" : "text-white/75"}`}>{value}</div>
+      <div
+        className={`mt-1 text-sm leading-snug ${emphasize ? "text-cyan-200" : "text-white/75"}`}
+      >
+        {value}
+      </div>
     </div>
   );
 }
@@ -1199,7 +1435,15 @@ function Field({ label, children }: { label: string; children: ReactNode }) {
   );
 }
 
-function RatingField({ label, value, onChange }: { label: string; value: number; onChange: (v: number) => void }) {
+function RatingField({
+  label,
+  value,
+  onChange,
+}: {
+  label: string;
+  value: number;
+  onChange: (v: number) => void;
+}) {
   return (
     <div>
       <label className="mb-1.5 block font-[family-name:var(--font-mono)] text-[10px] font-semibold uppercase tracking-widest text-white/40">
