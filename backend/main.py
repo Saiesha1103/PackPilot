@@ -8,6 +8,9 @@ from app.mqtt.mqtt_subscriber import start_mqtt_subscriber
 from fastapi.middleware.cors import CORSMiddleware
 from app.api.oee_routes import router as oee_router
 from app.api.downtime_routes import router as downtime_router
+from app.api.changeover_routes import (
+    router as changeover_router
+)
 
 app = FastAPI(
     title="PackPilot API",
@@ -37,6 +40,7 @@ app.include_router(sensor_router)
 app.include_router(dashboard_router)
 app.include_router(oee_router)
 app.include_router(downtime_router)
+app.include_router(changeover_router)
 
 @app.get("/")
 def root():
