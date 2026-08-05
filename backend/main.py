@@ -13,6 +13,11 @@ from app.api.changeover_routes import (
 )
 from app.pfmea.router import router as pfmea_router
 from app.api.alert_routes import router as alert_router
+from app.api.health_routes import router as health_router
+from app.api.sensor_trend_routes import router as sensor_trend_router
+from app.api.maintenance_routes import router as maintenance_router
+from app.reports.routes import router as reports_router
+
 app = FastAPI(
     title="PackPilot API",
     description="Industry 4.0 Manufacturing Operations Platform",
@@ -44,6 +49,11 @@ app.include_router(downtime_router)
 app.include_router(changeover_router)
 app.include_router(pfmea_router)
 app.include_router(alert_router)
+app.include_router(health_router)
+app.include_router(sensor_trend_router)
+app.include_router(maintenance_router)
+app.include_router(reports_router)
+
 
 @app.get("/")
 def root():

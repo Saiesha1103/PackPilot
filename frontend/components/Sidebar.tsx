@@ -13,18 +13,38 @@ import {
   ShieldCheck,
   Settings,
   Repeat,
+  Activity,
+  ClipboardCheck,
   X,
 } from "lucide-react";
 
 const navItems = [
   { label: "Dashboard", href: "/dashboard", icon: LayoutDashboard },
+
   { label: "Machines", href: "/dashboard/machines", icon: Factory },
+
   { label: "Sensors", href: "/dashboard/sensors", icon: Radio },
+
   { label: "Alerts", href: "/dashboard/alerts", icon: AlertTriangle },
+
+  {
+    label: "Condition Monitoring",
+    href: "/dashboard/condition-monitoring",
+    icon: Activity,
+  },
+
   { label: "Downtime", href: "/dashboard/downtime", icon: TimerReset },
-  { label: "Maintenance", href: "/dashboard/maintenance", icon: Wrench },
+
+  {
+    label: "Preventive Maintenance",
+    href: "/dashboard/preventive-maintenance",
+    icon: ClipboardCheck,
+  },
+
   { label: "Reports", href: "/dashboard/reports", icon: FileBarChart2 },
+
   { label: "PFMEA", href: "/dashboard/pfmea", icon: ShieldCheck },
+
   { label: "Settings", href: "/dashboard/settings", icon: Settings },
 
   {
@@ -33,7 +53,6 @@ const navItems = [
     icon: Repeat,
   },
 ];
-
 interface SidebarProps {
   isOpen: boolean;
   onClose: () => void;
@@ -75,15 +94,18 @@ export default function Sidebar({ isOpen, onClose }: SidebarProps) {
               />
             </svg>
           </div>
+
           <div>
             <p className="font-[family-name:var(--font-display)] text-base font-semibold tracking-tight text-slate-100">
               PackPilot
             </p>
+
             <p className="text-[10px] uppercase tracking-[0.2em] text-slate-500">
               Operations Platform
             </p>
           </div>
         </div>
+
         <button
           onClick={onClose}
           aria-label="Close menu"
@@ -99,15 +121,17 @@ export default function Sidebar({ isOpen, onClose }: SidebarProps) {
           <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400 opacity-60" />
           <span className="relative inline-flex h-2 w-2 rounded-full bg-emerald-400 shadow-[0_0_8px_2px_rgba(52,211,153,0.7)]" />
         </span>
+
         <span className="text-[11px] font-medium uppercase tracking-[0.1em] text-emerald-300">
           System Operational
         </span>
       </div>
 
-      {/* nav */}
+      {/* navigation */}
       <nav className="relative flex-1 space-y-1 overflow-y-auto px-3">
         {navItems.map(({ label, href, icon: Icon }) => {
           const active = isActive(href);
+
           return (
             <Link
               key={href}
@@ -121,14 +145,18 @@ export default function Sidebar({ isOpen, onClose }: SidebarProps) {
               {active && (
                 <span className="absolute left-0 top-1/2 h-5 w-[3px] -translate-y-1/2 rounded-full bg-gradient-to-b from-sky-300 to-cyan-300 shadow-[0_0_10px_2px_rgba(56,189,248,0.6)]" />
               )}
+
               <Icon
-                className={`h-[18px] w-[18px] shrink-0 transition-colors ${
+                className={`h-[18px] w-[18px] shrink-0 ${
                   active
                     ? "text-sky-300"
                     : "text-slate-500 group-hover:text-slate-300"
                 }`}
               />
-              <span className="font-medium tracking-tight">{label}</span>
+
+              <span className="font-medium tracking-tight">
+                {label}
+              </span>
             </Link>
           );
         })}
@@ -136,18 +164,16 @@ export default function Sidebar({ isOpen, onClose }: SidebarProps) {
 
       {/* profile */}
       <div className="relative m-3 mt-2 flex items-center gap-3 rounded-xl border border-white/[0.07] bg-white/[0.03] p-3 shadow-[0_14px_30px_-16px_rgba(2,6,23,0.8),inset_0_1px_0_rgba(255,255,255,0.06)] backdrop-blur-xl">
-        <div className="relative h-9 w-9 shrink-0 overflow-hidden rounded-full border border-white/10 bg-gradient-to-br from-slate-700 to-slate-800 shadow-[inset_0_1px_0_rgba(255,255,255,0.1)]" />
+        <div className="relative h-9 w-9 shrink-0 overflow-hidden rounded-full border border-white/10 bg-gradient-to-br from-slate-700 to-slate-800" />
+
         <div className="min-w-0">
           <p className="truncate text-sm font-medium text-slate-200">
             Operations Manager
           </p>
+
           <p className="flex items-center gap-1.5 text-[11px] text-slate-500">
             <span className="h-1.5 w-1.5 rounded-full bg-emerald-400" />
             Online
-          </p>
-          <p className="flex items-center gap-1.5 text-[11px] text-slate-500">
-            <span className="h-1.5 w-1.5 rounded-full bg-emerald-400" />
-            Operations Manager
           </p>
         </div>
       </div>
@@ -156,15 +182,14 @@ export default function Sidebar({ isOpen, onClose }: SidebarProps) {
 
   return (
     <>
-      {/* desktop fixed sidebar */}
       <aside className="fixed inset-y-0 left-0 z-40 hidden w-[260px] border-r border-white/[0.06] bg-white/[0.025] shadow-[8px_0_40px_-20px_rgba(2,6,23,0.9)] backdrop-blur-[32px] lg:block">
         {content}
       </aside>
 
-      {/* mobile drawer */}
       <div
-        className={`fixed inset-0 z-50 lg:hidden ${isOpen ? "pointer-events-auto" : "pointer-events-none"}`}
-        aria-hidden={!isOpen}
+        className={`fixed inset-0 z-50 lg:hidden ${
+          isOpen ? "pointer-events-auto" : "pointer-events-none"
+        }`}
       >
         <div
           onClick={onClose}
@@ -172,6 +197,7 @@ export default function Sidebar({ isOpen, onClose }: SidebarProps) {
             isOpen ? "opacity-100" : "opacity-0"
           }`}
         />
+
         <aside
           className={`absolute inset-y-0 left-0 w-[260px] border-r border-white/[0.08] bg-[#060b16]/95 shadow-[8px_0_60px_-16px_rgba(2,6,23,0.95)] backdrop-blur-[32px] transition-transform duration-300 ease-out ${
             isOpen ? "translate-x-0" : "-translate-x-full"
