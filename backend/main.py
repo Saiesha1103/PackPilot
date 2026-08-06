@@ -40,7 +40,19 @@ def startup():
 
     app.state.mqtt_client = start_mqtt_subscriber()
 
-    print("PackPilot MQTT integration started")
+    if app.state.mqtt_client:
+        print("PackPilot MQTT integration started")
+
+
+@app.on_event("shutdown")
+def shutdown():
+    mqtt_client = getattr(app.state, "mqtt_client", None)
+
+    if mqtt_client:
+        mqtt_client.loop_stop()
+        mqtt_client.disconnect()
+
+
 app.include_router(machine_router)
 app.include_router(sensor_router)
 app.include_router(dashboard_router)

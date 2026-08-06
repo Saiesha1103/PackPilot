@@ -107,11 +107,17 @@ def start_mqtt_subscriber():
     client.on_connect = on_connect
     client.on_message = on_message
 
-    client.connect(
-        MQTT_BROKER,
-        MQTT_PORT,
-        60,
-    )
+    try:
+        client.connect(
+            MQTT_BROKER,
+            MQTT_PORT,
+            60,
+        )
+    except OSError as exc:
+        print(
+            f"MQTT broker unavailable; API starting without MQTT subscriber ({exc})"
+        )
+        return None
 
     print("Starting PackPilot MQTT subscriber...")
 
