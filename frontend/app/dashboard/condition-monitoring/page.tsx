@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import { API_BASE_URL } from "@/lib/api";
 import {
   Activity,
   HeartPulse,
@@ -54,7 +55,7 @@ export default function ConditionMonitoringPage() {
 
   async function fetchMachineHealth() {
     const response = await fetch(
-      "http://127.0.0.1:8000/health/"
+      `${API_BASE_URL}/health/`
     );
 
     const data = await response.json();
@@ -64,7 +65,7 @@ export default function ConditionMonitoringPage() {
 
   async function fetchTrend() {
     const response = await fetch(
-      "http://127.0.0.1:8000/sensor-trends/1"
+      `${API_BASE_URL}/sensor-trends/1`
     );
 
     const data = await response.json();

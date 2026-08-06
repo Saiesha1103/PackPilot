@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 
+import { API_BASE_URL } from "@/lib/api";
 import {
   CalendarDays,
   CheckCircle2,
@@ -61,9 +62,9 @@ export default function PreventiveMaintenancePage() {
 
   const loadData = useCallback(async () => {
     const [jobsRes, upcomingRes, completedRes] = await Promise.all([
-      fetch("http://127.0.0.1:8000/maintenance/"),
-      fetch("http://127.0.0.1:8000/maintenance/upcoming"),
-      fetch("http://127.0.0.1:8000/maintenance/completed"),
+      fetch(`${API_BASE_URL}/maintenance/`),
+      fetch(`${API_BASE_URL}/maintenance/upcoming`),
+      fetch(`${API_BASE_URL}/maintenance/completed`),
     ]);
 
     const [jobsData, upcomingData, completedData] = await Promise.all([
@@ -78,7 +79,7 @@ export default function PreventiveMaintenancePage() {
   }, []);
 
   async function markComplete(jobId: number) {
-    await fetch(`http://127.0.0.1:8000/maintenance/${jobId}/complete`, {
+    await fetch(`${API_BASE_URL}/maintenance/${jobId}/complete`, {
       method: "PUT",
       headers: {
         "Content-Type": "application/json",

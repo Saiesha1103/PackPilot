@@ -10,7 +10,7 @@ import {
   useSpring,
   useTransform,
 } from "framer-motion";
-import { ArrowRight, GitBranch } from "lucide-react";
+import { ArrowRight } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { HeroKpiStack } from "@/components/hero-kpi-stack";
 
@@ -368,17 +368,6 @@ export function Hero() {
                   />
                 </Button>
               </Link>
-            </motion.span>
-            <motion.span
-              variants={sequenceItem}
-              whileHover={{ scale: 1.03, y: -1 }}
-              whileTap={{ scale: 0.97 }}
-              transition={{ type: "spring", stiffness: 400, damping: 22 }}
-            >
-              <Button variant="secondary" size="lg">
-                <GitBranch size={16} strokeWidth={1.75} />
-                View Architecture
-              </Button>
             </motion.span>
           </motion.div>
 

@@ -5,10 +5,9 @@ import { Space_Grotesk, Inter, JetBrains_Mono } from "next/font/google";
 import {
   getLatestSensorReading,
   getSensorReadings,
-  calculateOEE,
   getOEEHistory,
+  API_BASE_URL,
   type SensorReading,
-  type OEEResponse,
   type OEEHistoryRecord,
 } from "@/lib/api";
 
@@ -32,63 +31,28 @@ const mono = JetBrains_Mono({
 
 /* ---------------------------------- data ---------------------------------- */
 
-const kpis = [
-  {
-    label: "OEE",
-    value: "87.4",
-    unit: "%",
-    delta: "+2.1",
-    trend: "up",
-    accent: "from-sky-400 to-cyan-300",
-  },
-  {
-    label: "Throughput",
-    value: "4,812",
-    unit: "u/hr",
-    delta: "+164",
-    trend: "up",
-    accent: "from-blue-400 to-sky-300",
-  },
-  {
-    label: "Active Lines",
-    value: "14",
-    unit: "/16",
-    delta: "0",
-    trend: "flat",
-    accent: "from-indigo-400 to-blue-300",
-  },
-  {
-    label: "Energy Draw",
-    value: "2.31",
-    unit: "MW",
-    delta: "-0.06",
-    trend: "down",
-    accent: "from-cyan-400 to-teal-300",
-  },
-];
+// Mirrors the backend's authoritative high-temperature alert threshold
+// (backend/app/alerts/service.py: TEMPERATURE_HIGH). Not a new threshold.
+const TEMPERATURE_HIGH_C = 80;
 
-const alerts = [
-  {
-    level: "critical",
-    msg: "Laser Cutter 4 — thermal cutoff triggered",
-    time: "2m ago",
-  },
-  {
-    level: "warning",
-    msg: "Injection Press 7 — cycle time drift +4.2%",
-    time: "11m ago",
-  },
-  {
-    level: "info",
-    msg: "Conveyor Sort A — scheduled maintenance in 6h",
-    time: "38m ago",
-  },
-  {
-    level: "warning",
-    msg: "Zone: Molding — ambient temp above threshold",
-    time: "1h ago",
-  },
-];
+type AlertApiRecord = {
+  id: number;
+  machine_id: number;
+  alert_type: string;
+  message: string;
+  severity: string;
+  timestamp: string;
+  status: string;
+};
+
+// Mirrors the severity classification already used in
+// frontend/app/dashboard/alerts/page.tsx — not a new scheme.
+function mapAlertSeverity(severity: string): "critical" | "warning" | "info" {
+  const normalized = severity.toLowerCase();
+  if (normalized === "critical") return "critical";
+  if (normalized === "high" || normalized === "medium") return "warning";
+  return "info";
+}
 
 /* -------------------------------- helpers -------------------------------- */
 
@@ -131,6 +95,7 @@ function alertColor(level: string) {
 function sensorColor(status: string) {
   if (status === "critical") return "text-rose-300";
   if (status === "elevated") return "text-amber-300";
+  if (status === "reporting") return "text-slate-400";
   return "text-emerald-300";
 }
 
@@ -148,18 +113,11 @@ export default function DashboardPage() {
   const [temperatureHistory, setTemperatureHistory] = useState<SensorReading[]>(
     [],
   );
-  const [oeeData, setOeeData] = useState<OEEResponse | null>(null);
   const [oeeHistory, setOeeHistory] =
   useState<OEEHistoryRecord[]>([]);
-  const [shiftOEE, setShiftOEE] = useState<{
-    shiftA: OEEResponse | null;
-    shiftB: OEEResponse | null;
-    shiftC: OEEResponse | null;
-  }>({
-    shiftA: null,
-    shiftB: null,
-    shiftC: null,
-  });
+  const [activeAlerts, setActiveAlerts] = useState<AlertApiRecord[]>([]);
+  const [alertsLoading, setAlertsLoading] = useState(true);
+  const [alertsError, setAlertsError] = useState(false);
 
   // Existing dashboard animation
   useEffect(() => {
@@ -212,50 +170,6 @@ export default function DashboardPage() {
 
     return () => clearInterval(interval);
   }, []);
-  // Shift OEE comparison — calculated by backend
- useEffect(() => {
-
-  async function fetchShiftOEE() {
-      try {
-        const [shiftA, shiftB, shiftC] = await Promise.all([
-          calculateOEE({
-            planned_production_time: 480,
-            run_time: 420,
-            ideal_cycle_time: 0.5,
-            total_units: 760,
-            good_units: 740,
-          }),
-
-          calculateOEE({
-            planned_production_time: 480,
-            run_time: 400,
-            ideal_cycle_time: 0.5,
-            total_units: 700,
-            good_units: 665,
-          }),
-
-          calculateOEE({
-            planned_production_time: 480,
-            run_time: 440,
-            ideal_cycle_time: 0.5,
-            total_units: 820,
-            good_units: 790,
-          }),
-        ]);
-        setOeeData(shiftA);
-
-        setShiftOEE({
-          shiftA,
-          shiftB,
-          shiftC,
-        });
-      } catch (error) {
-        console.error("Failed to calculate shift OEE:", error);
-      }
-    }
-
-    fetchShiftOEE();
-  }, []);
   // Historical OEE — fetch latest 20 stored records
 useEffect(() => {
   async function fetchOEEHistory() {
@@ -277,6 +191,49 @@ useEffect(() => {
 
   fetchOEEHistory();
 }, []);
+  // Active Alerts — real backend data, same endpoint used by
+  // frontend/app/dashboard/alerts/page.tsx
+  useEffect(() => {
+    async function fetchDashboardAlerts() {
+      try {
+        const response = await fetch(`${API_BASE_URL}/alerts/`);
+
+        if (!response.ok) {
+          throw new Error(`Failed to fetch alerts: ${response.status}`);
+        }
+
+        const data: AlertApiRecord[] = await response.json();
+
+        setActiveAlerts(data.filter((alert) => alert.status === "Active"));
+        setAlertsError(false);
+      } catch (error) {
+        console.error("Failed to fetch alerts:", error);
+        setAlertsError(true);
+      } finally {
+        setAlertsLoading(false);
+      }
+    }
+
+    fetchDashboardAlerts();
+
+    const interval = setInterval(fetchDashboardAlerts, 10000);
+
+    return () => clearInterval(interval);
+  }, []);
+
+  // Latest genuine OEE record already in the DB — no new fetch, no POST.
+  const latestOee = oeeHistory.length > 0 ? oeeHistory[oeeHistory.length - 1] : null;
+
+  const criticalAlertCount = activeAlerts.filter(
+    (alert) => mapAlertSeverity(alert.severity) === "critical",
+  ).length;
+  const warningAlertCount = activeAlerts.filter(
+    (alert) => mapAlertSeverity(alert.severity) === "warning",
+  ).length;
+  const infoAlertCount = activeAlerts.filter(
+    (alert) => mapAlertSeverity(alert.severity) === "info",
+  ).length;
+
   const parseBackendTimestamp = (timestamp: string) => {
     const normalizedTimestamp =
       timestamp.endsWith("Z") || timestamp.includes("+")
@@ -313,7 +270,11 @@ useEffect(() => {
       id: "TEMP-01",
       zone: "Machine 1",
       reading: temperature ? `${temperature.value.toFixed(1)} °C` : "-- °C",
-      status: "nominal",
+      status: temperature
+        ? temperature.value > TEMPERATURE_HIGH_C
+          ? "critical"
+          : "nominal"
+        : "reporting",
       ts: temperature
         ? new Date(temperature.timestamp).toLocaleTimeString()
         : "--:--:--",
@@ -339,7 +300,7 @@ useEffect(() => {
           ? "Object Detected"
           : "Clear"
         : "--",
-      status: "nominal",
+      status: "reporting",
       ts: irSensor
         ? new Date(irSensor.timestamp).toLocaleTimeString()
         : "--:--:--",
@@ -406,12 +367,26 @@ useEffect(() => {
               {/* plant status */}
               <div className="mb-5 flex items-center gap-2.5">
                 <span className="relative flex h-2 w-2">
-                  <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400 opacity-60" />
-                  <span className="relative inline-flex h-2 w-2 rounded-full bg-emerald-400 shadow-[0_0_10px_2px_rgba(52,211,153,0.7)]" />
+                  <span
+                    className={`absolute inline-flex h-full w-full animate-ping rounded-full opacity-60 ${
+                      isMachineOnline ? "bg-emerald-400" : "bg-rose-500"
+                    }`}
+                  />
+                  <span
+                    className={`relative inline-flex h-2 w-2 rounded-full ${
+                      isMachineOnline
+                        ? "bg-emerald-400 shadow-[0_0_10px_2px_rgba(52,211,153,0.7)]"
+                        : "bg-rose-500 shadow-[0_0_10px_2px_rgba(244,63,94,0.7)]"
+                    }`}
+                  />
                 </span>
 
-                <span className="font-[family-name:var(--font-mono)] text-[10px] font-medium uppercase tracking-[0.22em] text-emerald-300">
-                  Plant Nominal — Sector 4B
+                <span
+                  className={`font-[family-name:var(--font-mono)] text-[10px] font-medium uppercase tracking-[0.22em] ${
+                    isMachineOnline ? "text-emerald-300" : "text-rose-300"
+                  }`}
+                >
+                  {isMachineOnline ? "Telemetry Online" : "Telemetry Offline"} — Sector 4B
                 </span>
               </div>
 
@@ -419,7 +394,7 @@ useEffect(() => {
               <h2 className="font-[family-name:var(--font-display)] text-3xl font-semibold leading-[1.1] tracking-[-0.035em] text-slate-100 sm:text-4xl lg:text-[46px]">
                 Meridian Assembly Plant
                 <span className="mt-1 block bg-gradient-to-r from-slate-200 via-sky-200 to-cyan-300 bg-clip-text text-transparent">
-                  is running at {oeeData ? oeeData.oee.toFixed(1) : "--"}%
+                  is running at {latestOee ? latestOee.oee.toFixed(1) : "--"}%
                   efficiency
                 </span>
               </h2>
@@ -440,15 +415,12 @@ useEffect(() => {
                 </div>
 
                 <div className="rounded-full border border-white/[0.07] bg-white/[0.035] px-3 py-1.5 text-[11px] text-slate-400 shadow-[inset_0_1px_0_rgba(255,255,255,0.05)] backdrop-blur-xl">
-                  <span className="mr-2 text-slate-500">Lines</span>
-                  <span className="font-medium text-emerald-300">
-                    14 / 16 Active
-                  </span>
-                </div>
-
-                <div className="rounded-full border border-white/[0.07] bg-white/[0.035] px-3 py-1.5 text-[11px] text-slate-400 shadow-[inset_0_1px_0_rgba(255,255,255,0.05)] backdrop-blur-xl">
                   <span className="mr-2 text-slate-500">Telemetry</span>
-                  <span className="font-medium text-sky-300">Live</span>
+                  <span
+                    className={`font-medium ${isMachineOnline ? "text-emerald-300" : "text-rose-300"}`}
+                  >
+                    {isMachineOnline ? "Live" : "Offline"}
+                  </span>
                 </div>
               </div>
             </div>
@@ -509,7 +481,7 @@ useEffect(() => {
                   strokeLinecap="round"
                   strokeDasharray="590.62"
                   strokeDashoffset={
-                    oeeData ? 590.62 * (1 - oeeData.oee / 100) : 590.62
+                    latestOee ? 590.62 * (1 - latestOee.oee / 100) : 590.62
                   }
                   filter="url(#oeeGlow)"
                   className="transition-all duration-1000"
@@ -524,23 +496,11 @@ useEffect(() => {
 
                 <div className="mt-1 flex items-end">
                   <span className="font-[family-name:var(--font-display)] text-[48px] font-semibold leading-none tracking-[-0.05em] text-slate-100">
-                    {oeeData ? oeeData.oee.toFixed(1) : "--"}
+                    {latestOee ? latestOee.oee.toFixed(1) : "--"}
                   </span>
                   <span className="mb-1.5 ml-1 text-sm font-medium text-sky-300">
                     %
                   </span>
-                </div>
-
-                <div className="mt-3 flex items-center gap-1.5 rounded-full border border-emerald-400/15 bg-emerald-400/[0.06] px-2.5 py-1">
-                  <span className="text-[10px] text-emerald-300">
-                    {shiftOEE.shiftA && shiftOEE.shiftB
-                      ? `${shiftOEE.shiftA.oee >= shiftOEE.shiftB.oee ? "↑" : "↓"} ${Math.abs(
-                          shiftOEE.shiftA.oee - shiftOEE.shiftB.oee,
-                        ).toFixed(1)}%`
-                      : "--"}
-                  </span>
-
-                  <span className="text-[9px] text-slate-500">vs Shift B</span>
                 </div>
               </div>
 
@@ -553,31 +513,13 @@ useEffect(() => {
 
           {/* bottom divider */}
           <div className="relative mt-8 border-t border-white/[0.06] pt-5">
-            <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+            <div className="grid gap-4 sm:grid-cols-2">
               <div>
                 <p className="font-[family-name:var(--font-mono)] text-[9px] uppercase tracking-[0.18em] text-slate-600">
-                  Current Shift
+                  Shift Schedule
                 </p>
                 <p className="mt-1 text-xs font-medium text-slate-300">
                   Shift A · 06:00–14:00
-                </p>
-              </div>
-
-              <div>
-                <p className="font-[family-name:var(--font-mono)] text-[9px] uppercase tracking-[0.18em] text-slate-600">
-                  Units Produced
-                </p>
-                <p className="mt-1 text-xs font-medium text-slate-300">
-                  {(38240 + (tick % 9) * 8).toLocaleString()}
-                </p>
-              </div>
-
-              <div>
-                <p className="font-[family-name:var(--font-mono)] text-[9px] uppercase tracking-[0.18em] text-slate-600">
-                  Scrap Rate
-                </p>
-                <p className="mt-1 text-xs font-medium text-emerald-300">
-                  1.26%
                 </p>
               </div>
 
@@ -587,9 +529,17 @@ useEffect(() => {
                 </p>
 
                 <div className="mt-1 flex items-center gap-2">
-                  <span className="h-1.5 w-1.5 rounded-full bg-sky-400 shadow-[0_0_8px_rgba(56,189,248,0.7)]" />
+                  <span
+                    className={`h-1.5 w-1.5 rounded-full ${
+                      isMachineOnline
+                        ? "bg-emerald-400 shadow-[0_0_8px_rgba(52,211,153,0.7)]"
+                        : "bg-rose-500 shadow-[0_0_8px_rgba(244,63,94,0.7)]"
+                    }`}
+                  />
                   <p className="text-xs font-medium text-slate-300">
-                    Live telemetry
+                    {Number.isFinite(telemetryAge)
+                      ? new Date(latestTelemetryTimestamp).toLocaleTimeString()
+                      : "No signal"}
                   </p>
                 </div>
               </div>
@@ -601,17 +551,17 @@ useEffect(() => {
           {[
             {
               label: "Availability",
-              value: oeeData?.availability,
+              value: latestOee?.availability,
               description: "Run time / planned production time",
             },
             {
               label: "Performance",
-              value: oeeData?.performance,
+              value: latestOee?.performance,
               description: "Actual output vs ideal production rate",
             },
             {
               label: "Quality",
-              value: oeeData?.quality,
+              value: latestOee?.quality,
               description: "Good units / total units",
             },
           ].map((factor) => (
@@ -649,68 +599,6 @@ useEffect(() => {
               </p>
             </div>
           ))}
-        </section>
-        {/* SHIFT OEE COMPARISON */}
-        <section className="mb-8 rounded-2xl border border-white/[0.07] bg-white/[0.035] p-5 backdrop-blur-[24px]">
-          <div className="mb-5">
-            <p className="font-[family-name:var(--font-mono)] text-[9px] uppercase tracking-[0.18em] text-slate-500">
-              Production Analytics
-            </p>
-
-            <h3 className="mt-1 font-[family-name:var(--font-display)] text-lg font-semibold text-slate-100">
-              Shift OEE Comparison
-            </h3>
-          </div>
-
-          <div className="grid gap-4 sm:grid-cols-3">
-            {[
-              {
-                label: "Shift A",
-                time: "06:00–14:00",
-                data: shiftOEE.shiftA,
-              },
-              {
-                label: "Shift B",
-                time: "14:00–22:00",
-                data: shiftOEE.shiftB,
-              },
-              {
-                label: "Shift C",
-                time: "22:00–06:00",
-                data: shiftOEE.shiftC,
-              },
-            ].map((shift) => (
-              <div
-                key={shift.label}
-                className="rounded-xl border border-white/[0.06] bg-black/10 p-4"
-              >
-                <div className="flex items-center justify-between">
-                  <div>
-                    <p className="text-xs font-medium text-slate-300">
-                      {shift.label}
-                    </p>
-
-                    <p className="mt-1 font-[family-name:var(--font-mono)] text-[8px] text-slate-600">
-                      {shift.time}
-                    </p>
-                  </div>
-
-                  <span className="font-[family-name:var(--font-display)] text-2xl font-semibold text-sky-300">
-                    {shift.data ? shift.data.oee.toFixed(1) : "--"}%
-                  </span>
-                </div>
-
-                <div className="mt-4 h-1.5 overflow-hidden rounded-full bg-white/[0.05]">
-                  <div
-                    className="h-full rounded-full bg-gradient-to-r from-sky-500 to-cyan-300 transition-all duration-1000"
-                    style={{
-                      width: `${Math.min(shift.data?.oee ?? 0, 100)}%`,
-                    }}
-                  />
-                </div>
-              </div>
-            ))}
-          </div>
         </section>
                 {/* HISTORICAL OEE TREND */}
         <section className="mb-8 rounded-2xl border border-white/[0.07] bg-white/[0.035] p-5 backdrop-blur-[24px]">
@@ -814,96 +702,6 @@ useEffect(() => {
             </div>
           )}
         </section>
-        {/* KPI CARDS */}
-        <section className="mb-8 grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-          {kpis.map((kpi, index) => (
-            <div
-              key={kpi.label}
-              className="group relative overflow-hidden rounded-2xl border border-white/[0.07] bg-white/[0.035] p-5 shadow-[0_18px_45px_-24px_rgba(14,165,233,0.35),inset_0_1px_0_rgba(255,255,255,0.07)] backdrop-blur-[24px] transition-all duration-300 hover:-translate-y-1 hover:border-sky-300/[0.16] hover:bg-white/[0.05]"
-            >
-              {/* subtle glow */}
-              <div className="pointer-events-none absolute -right-12 -top-12 h-32 w-32 rounded-full bg-sky-400/[0.08] blur-[50px] transition-all duration-300 group-hover:bg-sky-400/[0.13]" />
-
-              {/* top sheen */}
-              <div className="pointer-events-none absolute inset-x-6 top-0 h-px bg-gradient-to-r from-transparent via-white/20 to-transparent" />
-
-              <div className="relative">
-                <div className="flex items-start justify-between gap-4">
-                  <div>
-                    <p className="font-[family-name:var(--font-mono)] text-[9px] font-medium uppercase tracking-[0.18em] text-slate-500">
-                      {kpi.label}
-                    </p>
-
-                    <div className="mt-3 flex items-end gap-1.5">
-                      <span className="font-[family-name:var(--font-display)] text-[30px] font-semibold leading-none tracking-[-0.04em] text-slate-100">
-                        {kpi.label === "OEE" && oeeData
-                          ? oeeData.oee.toFixed(1)
-                          : kpi.value}
-                      </span>
-
-                      <span className="mb-0.5 text-[11px] font-medium text-slate-500">
-                        {kpi.unit}
-                      </span>
-                    </div>
-                  </div>
-
-                  <div
-                    className={`flex h-9 w-9 items-center justify-center rounded-xl border border-white/[0.07] bg-gradient-to-br ${kpi.accent} bg-opacity-10 shadow-[inset_0_1px_0_rgba(255,255,255,0.08)]`}
-                  >
-                    <span className="h-2 w-2 rounded-full bg-white/80 shadow-[0_0_10px_rgba(255,255,255,0.5)]" />
-                  </div>
-                </div>
-
-                <div className="mt-5 flex items-center justify-between">
-                  <div
-                    className={`flex items-center gap-1 text-[10px] font-medium ${
-                      kpi.trend === "down"
-                        ? "text-emerald-300"
-                        : kpi.trend === "flat"
-                          ? "text-slate-500"
-                          : "text-emerald-300"
-                    }`}
-                  >
-                    <span>
-                      {kpi.trend === "up"
-                        ? "↑"
-                        : kpi.trend === "down"
-                          ? "↓"
-                          : "—"}
-                    </span>
-
-                    <span>{kpi.delta}</span>
-
-                    <span className="font-normal text-slate-600">
-                      vs prev shift
-                    </span>
-                  </div>
-
-                  <span className="font-[family-name:var(--font-mono)] text-[9px] text-slate-600">
-                    0{index + 1}
-                  </span>
-                </div>
-
-                {/* tiny activity graph */}
-                <div className="mt-4 flex h-7 items-end gap-[3px]">
-                  {Array.from({ length: 18 }).map((_, barIndex) => {
-                    const height =
-                      25 + ((barIndex * 13 + index * 17 + tick * 3) % 65);
-
-                    return (
-                      <div
-                        key={barIndex}
-                        className="flex-1 rounded-sm bg-gradient-to-t from-sky-500/10 to-sky-300/45 transition-all duration-700"
-                        style={{ height: `${height}%` }}
-                      />
-                    );
-                  })}
-                </div>
-              </div>
-            </div>
-          ))}
-        </section>
-
         {/* PRODUCTION OUTPUT */}
         <section className="mb-8 overflow-hidden rounded-[24px] border border-white/[0.07] bg-white/[0.035] shadow-[0_24px_70px_-35px_rgba(14,165,233,0.35),inset_0_1px_0_rgba(255,255,255,0.07)] backdrop-blur-[26px]">
           {/* chart header */}
@@ -1053,7 +851,7 @@ useEffect(() => {
               </div>
 
               <div className="rounded-full border border-white/[0.07] bg-white/[0.035] px-3 py-1.5 font-[family-name:var(--font-mono)] text-[9px] text-slate-500 backdrop-blur-xl">
-                1 assets
+                1 asset
               </div>
             </div>
 
@@ -1153,54 +951,69 @@ useEffect(() => {
               </div>
 
               <div className="flex h-8 min-w-8 items-center justify-center rounded-full border border-rose-400/20 bg-rose-400/[0.08] px-2 text-[10px] font-semibold text-rose-300 shadow-[0_0_16px_-5px_rgba(244,63,94,0.5)]">
-                {alerts.length}
+                {activeAlerts.length}
               </div>
             </div>
 
             {/* alert list */}
-            <div className="divide-y divide-white/[0.045]">
-              {alerts.map((alert, index) => {
-                const colors = alertColor(alert.level);
+            {alertsLoading ? (
+              <div className="px-6 py-10 text-center text-xs text-slate-500">
+                Loading alerts…
+              </div>
+            ) : alertsError ? (
+              <div className="px-6 py-10 text-center text-xs text-rose-300/80">
+                Unable to load alerts
+              </div>
+            ) : activeAlerts.length === 0 ? (
+              <div className="px-6 py-10 text-center text-xs text-slate-500">
+                No active alerts
+              </div>
+            ) : (
+              <div className="divide-y divide-white/[0.045]">
+                {activeAlerts.slice(0, 5).map((alert) => {
+                  const severity = mapAlertSeverity(alert.severity);
+                  const colors = alertColor(severity);
 
-                return (
-                  <div
-                    key={`${alert.msg}-${index}`}
-                    className="group relative px-6 py-4 transition-all duration-300 hover:bg-white/[0.025]"
-                  >
-                    <div className="flex items-start gap-3">
-                      <div
-                        className={`mt-1 flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-white/[0.025] ring-1 ${colors.ring}`}
-                      >
-                        <span
-                          className={`h-1.5 w-1.5 rounded-full ${colors.dot}`}
-                        />
-                      </div>
-
-                      <div className="min-w-0 flex-1">
-                        <div className="flex items-start justify-between gap-3">
+                  return (
+                    <div
+                      key={alert.id}
+                      className="group relative px-6 py-4 transition-all duration-300 hover:bg-white/[0.025]"
+                    >
+                      <div className="flex items-start gap-3">
+                        <div
+                          className={`mt-1 flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-white/[0.025] ring-1 ${colors.ring}`}
+                        >
                           <span
-                            className={`font-[family-name:var(--font-mono)] text-[8px] font-medium uppercase tracking-[0.14em] ${colors.text}`}
-                          >
-                            {alert.level}
-                          </span>
-
-                          <span className="shrink-0 font-[family-name:var(--font-mono)] text-[8px] text-slate-600">
-                            {alert.time}
-                          </span>
+                            className={`h-1.5 w-1.5 rounded-full ${colors.dot}`}
+                          />
                         </div>
 
-                        <p className="mt-1.5 text-xs leading-5 text-slate-300">
-                          {alert.msg}
-                        </p>
-                      </div>
-                    </div>
+                        <div className="min-w-0 flex-1">
+                          <div className="flex items-start justify-between gap-3">
+                            <span
+                              className={`font-[family-name:var(--font-mono)] text-[8px] font-medium uppercase tracking-[0.14em] ${colors.text}`}
+                            >
+                              {severity}
+                            </span>
 
-                    {/* hover accent */}
-                    <div className="absolute inset-y-3 left-0 w-[2px] scale-y-0 rounded-full bg-sky-400/60 transition-transform duration-300 group-hover:scale-y-100" />
-                  </div>
-                );
-              })}
-            </div>
+                            <span className="shrink-0 font-[family-name:var(--font-mono)] text-[8px] text-slate-600">
+                              {new Date(alert.timestamp).toLocaleTimeString()}
+                            </span>
+                          </div>
+
+                          <p className="mt-1.5 text-xs leading-5 text-slate-300">
+                            {`Machine ${alert.machine_id} — ${alert.message}`}
+                          </p>
+                        </div>
+                      </div>
+
+                      {/* hover accent */}
+                      <div className="absolute inset-y-3 left-0 w-[2px] scale-y-0 rounded-full bg-sky-400/60 transition-transform duration-300 group-hover:scale-y-100" />
+                    </div>
+                  );
+                })}
+              </div>
+            )}
 
             {/* alert summary */}
             <div className="border-t border-white/[0.06] bg-white/[0.015] px-6 py-4">
@@ -1210,7 +1023,7 @@ useEffect(() => {
                     Critical
                   </p>
 
-                  <p className="mt-1 text-sm font-semibold text-rose-300">1</p>
+                  <p className="mt-1 text-sm font-semibold text-rose-300">{criticalAlertCount}</p>
                 </div>
 
                 <div className="rounded-xl border border-amber-400/10 bg-amber-400/[0.035] px-3 py-2">
@@ -1218,7 +1031,7 @@ useEffect(() => {
                     Warning
                   </p>
 
-                  <p className="mt-1 text-sm font-semibold text-amber-300">2</p>
+                  <p className="mt-1 text-sm font-semibold text-amber-300">{warningAlertCount}</p>
                 </div>
 
                 <div className="rounded-xl border border-sky-400/10 bg-sky-400/[0.035] px-3 py-2">
@@ -1226,7 +1039,7 @@ useEffect(() => {
                     Info
                   </p>
 
-                  <p className="mt-1 text-sm font-semibold text-sky-300">1</p>
+                  <p className="mt-1 text-sm font-semibold text-sky-300">{infoAlertCount}</p>
                 </div>
               </div>
 
@@ -1345,7 +1158,9 @@ useEffect(() => {
                               ? "bg-rose-500 shadow-[0_0_8px_rgba(244,63,94,0.7)]"
                               : sensor.status === "elevated"
                                 ? "bg-amber-400 shadow-[0_0_8px_rgba(251,191,36,0.65)]"
-                                : "bg-emerald-400 shadow-[0_0_8px_rgba(52,211,153,0.6)]"
+                                : sensor.status === "reporting"
+                                  ? "bg-slate-500 shadow-[0_0_6px_rgba(100,116,139,0.5)]"
+                                  : "bg-emerald-400 shadow-[0_0_8px_rgba(52,211,153,0.6)]"
                           }`}
                         />
 
@@ -1404,14 +1219,15 @@ useEffect(() => {
           </div>
 
           <div className="flex flex-wrap items-center gap-4">
-            <span className="flex items-center gap-1.5 font-[family-name:var(--font-mono)] text-[8px] uppercase tracking-[0.12em] text-slate-600">
-              <span className="h-1.5 w-1.5 rounded-full bg-emerald-400" />
-              API Connected
-            </span>
-
-            <span className="flex items-center gap-1.5 font-[family-name:var(--font-mono)] text-[8px] uppercase tracking-[0.12em] text-slate-600">
-              <span className="h-1.5 w-1.5 rounded-full bg-sky-400" />
-              Telemetry Live
+            <span
+              className={`flex items-center gap-1.5 font-[family-name:var(--font-mono)] text-[8px] uppercase tracking-[0.12em] ${
+                isMachineOnline ? "text-slate-600" : "text-rose-400"
+              }`}
+            >
+              <span
+                className={`h-1.5 w-1.5 rounded-full ${isMachineOnline ? "bg-emerald-400" : "bg-rose-500"}`}
+              />
+              {isMachineOnline ? "Telemetry Live" : "Telemetry Offline"}
             </span>
 
             <span className="font-[family-name:var(--font-mono)] text-[8px] uppercase tracking-[0.12em] text-slate-700">

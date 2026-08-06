@@ -41,17 +41,15 @@ const navItems = [
     icon: ClipboardCheck,
   },
 
-  { label: "Reports", href: "/dashboard/reports", icon: FileBarChart2 },
-
   { label: "PFMEA", href: "/dashboard/pfmea", icon: ShieldCheck },
-
-  { label: "Settings", href: "/dashboard/settings", icon: Settings },
-
   {
     label: "Changeover",
     href: "/dashboard/changeover",
     icon: Repeat,
   },
+  { label: "Reports", href: "/dashboard/reports", icon: FileBarChart2 },
+
+  { label: "Settings", href: "/dashboard/settings", icon: Settings },
 ];
 interface SidebarProps {
   isOpen: boolean;
@@ -154,9 +152,7 @@ export default function Sidebar({ isOpen, onClose }: SidebarProps) {
                 }`}
               />
 
-              <span className="font-medium tracking-tight">
-                {label}
-              </span>
+              <span className="font-medium tracking-tight">{label}</span>
             </Link>
           );
         })}

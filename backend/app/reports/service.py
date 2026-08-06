@@ -5,23 +5,32 @@ from app.models.machine import Machine
 from app.models.maintenance import Maintenance
 from app.models.downtime_event import DowntimeEvent
 from app.models.pfmea import PFMEA
+from app.models.oee import OEERecord
 
 
 def get_reports_summary(db: Session):
 
     # ---------------- OEE ----------------
+    # Reuses the latest genuine OEERecord already stored via
+    # POST /oee/calculate (app/services/oee_service.py). No new
+    # OEE calculation or record is created here.
 
-    availability = 92
-    performance = 88
-    quality = 97
-
-    oee = round(
-        availability
-        * performance
-        * quality
-        / 10000,
-        2,
+    latest_oee = (
+        db.query(OEERecord)
+        .order_by(OEERecord.timestamp.desc())
+        .first()
     )
+
+    if latest_oee:
+        availability = latest_oee.availability
+        performance = latest_oee.performance
+        quality = latest_oee.quality
+        oee = latest_oee.oee
+    else:
+        availability = None
+        performance = None
+        quality = None
+        oee = None
 
     # ---------------- Maintenance ----------------
 

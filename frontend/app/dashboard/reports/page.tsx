@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 
+import { API_BASE_URL } from "@/lib/api";
 import {
   Activity,
   Gauge,
@@ -80,7 +81,7 @@ export default function EngineeringReportsPage() {
 
   const loadData = useCallback(async () => {
     try {
-      const response = await fetch("http://127.0.0.1:8000/reports/summary");
+      const response = await fetch(`${API_BASE_URL}/reports/summary`);
 
       if (!response.ok) {
         setError(true);
@@ -123,7 +124,7 @@ export default function EngineeringReportsPage() {
 
     const list: { text: string; ok: boolean }[] = [];
 
-    if (oee.oee !== undefined) {
+    if (oee.oee !== undefined && oee.oee !== null) {
       if (oee.oee >= OEE_TARGET) {
         list.push({ text: "OEE exceeds target.", ok: true });
       } else {
@@ -339,7 +340,7 @@ export default function EngineeringReportsPage() {
                   <Gauge className="h-6 w-6 text-cyan-300" />
                 </div>
 
-                {oee.oee === undefined ? (
+                {oee.oee === undefined || oee.oee === null ? (
                   <p className="mt-6 text-sm text-slate-500">
                     No OEE data available.
                   </p>

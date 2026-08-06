@@ -1,6 +1,7 @@
 "use client";
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
+import { API_BASE_URL } from "@/lib/api";
 import {
   AlertTriangle,
   BellRing,
@@ -122,7 +123,7 @@ export default function AlertsPage() {
   useEffect(() => {
     async function fetchAlerts() {
       try {
-        const response = await fetch("http://127.0.0.1:8000/alerts/");
+        const response = await fetch(`${API_BASE_URL}/alerts/`);
 
         if (!response.ok) {
           throw new Error(`Failed to fetch alerts: ${response.status}`);
@@ -233,7 +234,7 @@ export default function AlertsPage() {
   const acknowledgeIncident = async (incident: Incident) => {
     try {
       const response = await fetch(
-        `http://127.0.0.1:8000/alerts/${incident.apiId}/resolve`,
+        `${API_BASE_URL}/alerts/${incident.apiId}/resolve`,
         {
           method: "PATCH",
         },
@@ -628,12 +629,7 @@ export default function AlertsPage() {
                             </button>
                           )}
 
-                          <Link
-                            href={`/dashboard/machines/${incident.machineId.toLowerCase()}`}
-                            className="rounded-xl border border-sky-400/15 bg-sky-400/[0.055] px-3 py-2 font-[family-name:var(--font-mono)] text-[8px] font-semibold uppercase tracking-[0.1em] text-sky-300 transition hover:border-sky-400/30 hover:bg-sky-400/[0.09]"
-                          >
-                            View Machine
-                          </Link>
+                  
                         </div>
                       </div>
                     </div>

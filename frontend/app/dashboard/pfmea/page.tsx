@@ -1,9 +1,9 @@
 "use client";
 import { useEffect, useMemo, useState, type ReactNode } from "react";
+import { API_BASE_URL } from "@/lib/api";
 import {
   AlertTriangle,
   ShieldAlert,
-  Activity,
   TrendingDown,
   Search,
   Plus,
@@ -11,11 +11,6 @@ import {
   ChevronDown,
   Gauge,
   ClipboardList,
-  CheckCircle2,
-  Clock3,
-  Target,
-  ArrowRight,
-  Wrench,
 } from "lucide-react";
 
 /* ------------------------------------------------------------------ */
@@ -23,7 +18,6 @@ import {
 /* ------------------------------------------------------------------ */
 
 type RiskLevel = "Critical" | "High" | "Medium" | "Low";
-type ActionStatus = "Open" | "In Progress" | "Completed";
 
 type ProcessStep =
   | "Carton Feeding"
@@ -44,7 +38,6 @@ interface PFMEARecord {
   detection: number;
   recommendedAction: string;
   owner: string;
-  actionStatus: ActionStatus;
 }
 interface PFMEAApiRecord {
   id: number;
@@ -75,7 +68,6 @@ function mapApiRecord(record: PFMEAApiRecord): PFMEARecord {
     detection: record.detection,
     recommendedAction: "Engineering review required",
     owner: "Engineering",
-    actionStatus: "Open",
   };
 }
 
@@ -91,8 +83,6 @@ const PROCESS_STEPS: ProcessStep[] = [
   "Coding & Inspection",
   "Case Packing",
 ];
-
-const STATUS_OPTIONS: ActionStatus[] = ["Open", "In Progress", "Completed"];
 
 function calcRPN(s: number, o: number, d: number): number {
   return s * o * d;
@@ -140,234 +130,6 @@ const RISK_STYLES: Record<
   },
 };
 
-const STATUS_STYLES: Record<
-  ActionStatus,
-  { text: string; bg: string; border: string; icon: ReactNode }
-> = {
-  Open: {
-    text: "text-amber-300",
-    bg: "bg-amber-500/10",
-    border: "border-amber-500/25",
-    icon: <Clock3 className="h-3 w-3" />,
-  },
-  "In Progress": {
-    text: "text-cyan-300",
-    bg: "bg-cyan-500/10",
-    border: "border-cyan-500/25",
-    icon: <Activity className="h-3 w-3" />,
-  },
-  Completed: {
-    text: "text-emerald-300",
-    bg: "bg-emerald-500/10",
-    border: "border-emerald-500/25",
-    icon: <CheckCircle2 className="h-3 w-3" />,
-  },
-};
-
-/* ------------------------------------------------------------------ */
-/* Mock register data                                                  */
-/* ------------------------------------------------------------------ */
-
-const INITIAL_RECORDS: PFMEARecord[] = [
-  {
-    id: "PFM-001",
-    process: "Carton Forming",
-    failureMode: "Incomplete carton erection",
-    effect: "Carton collapse during downstream product loading",
-    cause: "Vacuum pickup degradation / forming timing deviation",
-    severity: 8,
-    occurrence: 8,
-    detection: 5,
-    recommendedAction:
-      "Introduce vacuum threshold interlock and scheduled suction-cup inspection.",
-    owner: "R. Mehta",
-    actionStatus: "In Progress",
-  },
-  {
-    id: "PFM-002",
-    process: "Sealing",
-    failureMode: "Seal integrity failure",
-    effect: "Product contamination / shelf-life loss",
-    cause: "Hot-melt glue temperature deviation",
-    severity: 9,
-    occurrence: 6,
-    detection: 6,
-    recommendedAction: "Implement corrective action and verify effectiveness.",
-    owner: "S. Kapoor",
-    actionStatus: "Open",
-  },
-  {
-    id: "PFM-003",
-    process: "Coding & Inspection",
-    failureMode: "Incorrect batch/date coding",
-    effect: "Regulatory non-compliance / recall risk",
-    cause: "Printer firmware fault / operator override",
-    severity: 9,
-    occurrence: 4,
-    detection: 7,
-    recommendedAction:
-      "Review and update printer firmware, implement operator training.",
-    owner: "A. Verma",
-    actionStatus: "Open",
-  },
-  {
-    id: "PFM-004",
-    process: "Sealing",
-    failureMode: "Seal contamination",
-    effect: "Product spoilage detected at retailer",
-    cause: "Foreign particle lodged in seal head",
-    severity: 8,
-    occurrence: 6,
-    detection: 6,
-    recommendedAction: "Implement corrective action and verify effectiveness.",
-    owner: "S. Kapoor",
-    actionStatus: "In Progress",
-  },
-  {
-    id: "PFM-005",
-    process: "Carton Feeding",
-    failureMode: "Carton misfeed",
-    effect: "Line stoppage / production delay",
-    cause: "Feeder timing misalignment",
-    severity: 6,
-    occurrence: 6,
-    detection: 4,
-    recommendedAction: "Implement corrective action and verify effectiveness.",
-    owner: "N. Iyer",
-    actionStatus: "In Progress",
-  },
-  {
-    id: "PFM-006",
-    process: "Product Loading",
-    failureMode: "Product loading error (short fill)",
-    effect: "Underweight carton reaches market",
-    cause: "Load-cell drift / miscalibration",
-    severity: 7,
-    occurrence: 5,
-    detection: 6,
-    recommendedAction: "Implement corrective action and verify effectiveness.",
-    owner: "P. Singh",
-    actionStatus: "Open",
-  },
-  {
-    id: "PFM-007",
-    process: "Sealing",
-    failureMode: "Adhesive application failure",
-    effect: "Flap not fully sealed, opens in transit",
-    cause: "Glue nozzle clogging",
-    severity: 7,
-    occurrence: 5,
-    detection: 5,
-    recommendedAction: "Implement corrective action and verify effectiveness.",
-    owner: "K. Rao",
-    actionStatus: "In Progress",
-  },
-  {
-    id: "PFM-008",
-    process: "Coding & Inspection",
-    failureMode: "Barcode verification failure",
-    effect: "Carton rejected at retailer distribution center",
-    cause: "Print head misalignment",
-    severity: 6,
-    occurrence: 4,
-    detection: 5,
-    recommendedAction: "Implement corrective action and verify effectiveness.",
-    owner: "A. Verma",
-    actionStatus: "Completed",
-  },
-  {
-    id: "PFM-009",
-    process: "Coding & Inspection",
-    failureMode: "Photoelectric sensor misalignment",
-    effect: "Missed defect detection downstream",
-    cause: "Sensor drift from line vibration",
-    severity: 7,
-    occurrence: 3,
-    detection: 6,
-    recommendedAction: "Implement corrective action and verify effectiveness.",
-    owner: "D. Sharma",
-    actionStatus: "Open",
-  },
-  {
-    id: "PFM-010",
-    process: "Case Packing",
-    failureMode: "Case packing jam",
-    effect: "Line stoppage, upstream back-pressure",
-    cause: "Conveyor synchronization error",
-    severity: 5,
-    occurrence: 5,
-    detection: 4,
-    recommendedAction: "Implement corrective action and verify effectiveness.",
-    owner: "K. Rao",
-    actionStatus: "In Progress",
-  },
-  {
-    id: "PFM-011",
-    process: "Case Packing",
-    failureMode: "Conveyor synchronization error",
-    effect: "Carton crushing at case infeed",
-    cause: "PLC timing drift",
-    severity: 6,
-    occurrence: 4,
-    detection: 4,
-    recommendedAction: "Implement corrective action and verify effectiveness.",
-    owner: "N. Iyer",
-    actionStatus: "Open",
-  },
-  {
-    id: "PFM-012",
-    process: "Product Loading",
-    failureMode: "Product misalignment during loading",
-    effect: "Carton damage / jam downstream",
-    cause: "Robotic gripper positioning error",
-    severity: 6,
-    occurrence: 3,
-    detection: 5,
-    recommendedAction: "Implement corrective action and verify effectiveness.",
-    owner: "P. Singh",
-    actionStatus: "Completed",
-  },
-  {
-    id: "PFM-013",
-    process: "Carton Forming",
-    failureMode: "Forming glue under-application",
-    effect: "Weak carton base, failure in transit",
-    cause: "Glue gun pressure inconsistency",
-    severity: 6,
-    occurrence: 3,
-    detection: 3,
-    recommendedAction: "Implement corrective action and verify effectiveness.",
-    owner: "R. Mehta",
-    actionStatus: "Completed",
-  },
-  {
-    id: "PFM-014",
-    process: "Carton Feeding",
-    failureMode: "Carton skew at pickup",
-    effect: "Minor misfeed, jam auto-cleared",
-    cause: "Vacuum belt wear",
-    severity: 3,
-    occurrence: 4,
-    detection: 3,
-    recommendedAction: "Implement corrective action and verify effectiveness.",
-    owner: "D. Sharma",
-    actionStatus: "Completed",
-  },
-];
-
-/* ------------------------------------------------------------------ */
-/* Static visualization data                                           */
-/* ------------------------------------------------------------------ */
-
-const PROCESS_RISK_EXPOSURE: { process: ProcessStep; avgRpn: number }[] = [
-  { process: "Carton Forming", avgRpn: 320 },
-  { process: "Sealing", avgRpn: 288 },
-  { process: "Coding & Inspection", avgRpn: 252 },
-  { process: "Product Loading", avgRpn: 178 },
-  { process: "Case Packing", avgRpn: 132 },
-  { process: "Carton Feeding", avgRpn: 108 },
-];
-
 /* ------------------------------------------------------------------ */
 /* Small presentational helpers                                        */
 /* ------------------------------------------------------------------ */
@@ -380,18 +142,6 @@ function RiskBadge({ risk }: { risk: RiskLevel }) {
     >
       <span className={`h-1.5 w-1.5 rounded-full ${s.dot}`} />
       {risk}
-    </span>
-  );
-}
-
-function StatusBadge({ status }: { status: ActionStatus }) {
-  const s = STATUS_STYLES[status];
-  return (
-    <span
-      className={`inline-flex items-center gap-1.5 rounded-full border ${s.border} ${s.bg} px-2.5 py-1 font-[family-name:var(--font-mono)] text-[10px] font-semibold uppercase tracking-wider ${s.text}`}
-    >
-      {s.icon}
-      {status}
     </span>
   );
 }
@@ -409,29 +159,22 @@ export default function PFMEAPage() {
   const [processFilter, setProcessFilter] = useState<
     "All Processes" | ProcessStep
   >("All Processes");
-  const [statusFilter, setStatusFilter] = useState<"All Status" | ActionStatus>(
-    "All Status",
-  );
 
   const [isModalOpen, setIsModalOpen] = useState(false);
 
   const [form, setForm] = useState({
-    process: PROCESS_STEPS[0],
     failureMode: "",
     effect: "",
-    cause: "",
     severity: 5,
     occurrence: 5,
     detection: 5,
-    owner: "",
-    recommendedAction: "",
   });
 useEffect(() => {
   async function fetchPFMEA() {
     try {
       setLoading(true);
 
-      const response = await fetch("http://127.0.0.1:8000/pfmea/");
+      const response = await fetch(`${API_BASE_URL}/pfmea/`);
 
       if (!response.ok) {
         throw new Error(`Failed to fetch PFMEA: ${response.status}`);
@@ -439,11 +182,7 @@ useEffect(() => {
 
       const data: PFMEAApiRecord[] = await response.json();
 
-      console.log("PFMEA API DATA:", data);
-
       const mapped = data.map(mapApiRecord);
-
-      console.log("PFMEA MAPPED DATA:", mapped);
 
       setRecords(mapped);
     } catch (error) {
@@ -472,8 +211,6 @@ useEffect(() => {
       if (activeTab !== "All" && r.risk !== activeTab) return false;
       if (processFilter !== "All Processes" && r.process !== processFilter)
         return false;
-      if (statusFilter !== "All Status" && r.actionStatus !== statusFilter)
-        return false;
       if (search.trim()) {
         const q = search.trim().toLowerCase();
         const haystack =
@@ -482,7 +219,7 @@ useEffect(() => {
       }
       return true;
     });
-  }, [enriched, activeTab, processFilter, statusFilter, search]);
+  }, [enriched, activeTab, processFilter, search]);
 
   const tabCounts = useMemo(() => {
     const counts: Record<"All" | RiskLevel, number> = {
@@ -518,10 +255,10 @@ useEffect(() => {
   }, [enriched]);
 
  async function handleAddFailureMode() {
-  if (!form.failureMode.trim() || !form.owner.trim()) return;
+  if (!form.failureMode.trim()) return;
 
   try {
-    const response = await fetch("http://127.0.0.1:8000/pfmea/", {
+    const response = await fetch(`${API_BASE_URL}/pfmea/`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
@@ -542,29 +279,19 @@ useEffect(() => {
 
     const created: PFMEAApiRecord = await response.json();
 
-    const mappedRecord: PFMEARecord = {
-      ...mapApiRecord(created),
-      process: form.process,
-      cause: form.cause.trim() || "—",
-      recommendedAction: form.recommendedAction.trim() || "—",
-      owner: form.owner.trim(),
-      actionStatus: "Open",
-    };
-
-    setRecords((prev) => [mappedRecord, ...prev]);
+    // mapApiRecord is used directly (no local overrides) so the record
+    // displayed immediately matches exactly what a refetch will show —
+    // process/cause/owner/recommendedAction are not persisted by the API.
+    setRecords((prev) => [mapApiRecord(created), ...prev]);
 
     setIsModalOpen(false);
 
     setForm({
-      process: PROCESS_STEPS[0],
       failureMode: "",
       effect: "",
-      cause: "",
       severity: 5,
       occurrence: 5,
       detection: 5,
-      owner: "",
-      recommendedAction: "",
     });
   } catch (error) {
     console.error("PFMEA create error:", error);
@@ -590,10 +317,6 @@ const donutSegments = riskDistribution.map((seg) => {
     fraction,
   };
 });
-  const openActionsCount = useMemo(() => {
-    return records.filter((record) => record.actionStatus !== "Completed")
-      .length;
-  }, [records]);
   const averageRpn = useMemo(() => {
     if (enriched.length === 0) return 0;
 
@@ -602,7 +325,30 @@ const donutSegments = riskDistribution.map((seg) => {
     return Math.round(totalRpn / enriched.length);
   }, [enriched]);
 
-  const maxExposure = Math.max(...PROCESS_RISK_EXPOSURE.map((p) => p.avgRpn));
+  const processRiskExposure = useMemo(() => {
+    const totals = new Map<ProcessStep, { sum: number; count: number }>();
+    enriched.forEach((r) => {
+      const bucket = totals.get(r.process) ?? { sum: 0, count: 0 };
+      bucket.sum += r.rpn;
+      bucket.count += 1;
+      totals.set(r.process, bucket);
+    });
+    return Array.from(totals.entries())
+      .map(([process, { sum, count }]) => ({
+        process,
+        avgRpn: Math.round(sum / count),
+      }))
+      .sort((a, b) => b.avgRpn - a.avgRpn);
+  }, [enriched]);
+
+  const maxExposure = processRiskExposure.length
+    ? Math.max(...processRiskExposure.map((p) => p.avgRpn))
+    : 0;
+
+  const highestRiskRecord = useMemo(() => {
+    if (enriched.length === 0) return null;
+    return enriched.reduce((max, r) => (r.rpn > max.rpn ? r : max), enriched[0]);
+  }, [enriched]);
 
   return (
     <div className="min-h-full w-full overflow-x-hidden bg-[#050912]">
@@ -637,7 +383,7 @@ const donutSegments = riskDistribution.map((seg) => {
         {/* ============================================================ */}
         {/* KPI CARDS */}
         {/* ============================================================ */}
-        <div className="grid grid-cols-1 gap-3.5 sm:grid-cols-2 xl:grid-cols-4">
+        <div className="grid grid-cols-1 gap-3.5 sm:grid-cols-2 xl:grid-cols-3">
           <KpiCard
             icon={<ClipboardList className="h-4 w-4" />}
             accent="cyan"
@@ -653,19 +399,11 @@ const donutSegments = riskDistribution.map((seg) => {
             sub="Requires immediate mitigation"
           />
           <KpiCard
-            icon={<Wrench className="h-4 w-4" />}
-            accent="amber"
-            label="Open Actions"
-            value={String(openActionsCount)}
-            sub="3 actions currently overdue"
-          />
-          <KpiCard
             icon={<Gauge className="h-4 w-4" />}
             accent="emerald"
             label="Avg RPN"
             value={String(averageRpn)}
-            sub="↓ 8.4% after mitigation"
-            trendDown
+            sub="Mean across all failure modes"
           />
         </div>
 
@@ -769,65 +507,15 @@ const donutSegments = riskDistribution.map((seg) => {
               PFMEA Health
             </h2>
             <p className="mt-1 text-xs text-white/40">
-              Mitigation velocity and outstanding exposure
+              Outstanding risk exposure
             </p>
 
-            <div className="mt-5 flex items-center gap-5">
-              <div className="relative flex h-[104px] w-[104px] shrink-0 items-center justify-center">
-                <svg viewBox="0 0 120 120" className="h-full w-full -rotate-90">
-                  <circle
-                    cx="60"
-                    cy="60"
-                    r="50"
-                    fill="none"
-                    stroke="rgba(255,255,255,0.06)"
-                    strokeWidth="10"
-                  />
-                  <circle
-                    cx="60"
-                    cy="60"
-                    r="50"
-                    fill="none"
-                    stroke="#34d399"
-                    strokeWidth="10"
-                    strokeLinecap="round"
-                    strokeDasharray={`${2 * Math.PI * 50}`}
-                    strokeDashoffset={`${2 * Math.PI * 50 * (1 - 0.83)}`}
-                    style={{
-                      filter: "drop-shadow(0 0 6px rgba(52,211,153,0.45))",
-                    }}
-                  />
-                </svg>
-                <div className="absolute flex flex-col items-center">
-                  <span className="font-[family-name:var(--font-display)] text-xl font-semibold text-white">
-                    83%
-                  </span>
-                </div>
-              </div>
-              <div>
-                <div className="font-[family-name:var(--font-mono)] text-[11px] uppercase tracking-widest text-white/40">
-                  On-Time Closure
-                </div>
-                <div className="mt-1 text-sm text-white/60">
-                  Actions closed within target window
-                </div>
-              </div>
-            </div>
-
-            <div className="mt-5 grid grid-cols-3 gap-2.5">
+            <div className="mt-5 grid grid-cols-1 gap-2.5">
               <MiniStat
                 label="Critical"
                 value={String(tabCounts.Critical)}
                 accent="rose"
               />
-
-              <MiniStat
-                label="Open"
-                value={String(openActionsCount)}
-                accent="amber"
-              />
-
-              <MiniStat label="Overdue" value="3" accent="rose" />
             </div>
 
             <div className="mt-4 rounded-2xl border border-rose-500/25 bg-rose-500/[0.06] p-4">
@@ -835,17 +523,25 @@ const donutSegments = riskDistribution.map((seg) => {
                 <AlertTriangle className="h-3.5 w-3.5" />
                 Highest Risk Process
               </div>
-              <div className="mt-2 flex items-end justify-between">
-                <span className="font-[family-name:var(--font-display)] text-lg font-semibold text-white">
-                  Carton Forming
-                </span>
-                <span className="font-[family-name:var(--font-mono)] text-2xl font-bold text-rose-300">
-                  320
-                </span>
-              </div>
-              <div className="mt-0.5 text-[11px] text-white/40">
-                Current RPN
-              </div>
+              {highestRiskRecord ? (
+                <>
+                  <div className="mt-2 flex items-end justify-between">
+                    <span className="font-[family-name:var(--font-display)] text-lg font-semibold text-white">
+                      {highestRiskRecord.process}
+                    </span>
+                    <span className="font-[family-name:var(--font-mono)] text-2xl font-bold text-rose-300">
+                      {highestRiskRecord.rpn}
+                    </span>
+                  </div>
+                  <div className="mt-0.5 text-[11px] text-white/40">
+                    Current RPN
+                  </div>
+                </>
+              ) : (
+                <div className="mt-2 text-xs text-white/40">
+                  No risk data available.
+                </div>
+              )}
             </div>
           </div>
         </div>
@@ -853,105 +549,52 @@ const donutSegments = riskDistribution.map((seg) => {
         {/* ============================================================ */}
         {/* SECOND ROW */}
         {/* ============================================================ */}
-        <div className="mt-5 grid gap-4 xl:grid-cols-[minmax(0,1.7fr)_minmax(320px,0.9fr)]">
-          {/* LEFT: Process Risk Comparison */}
+        <div className="mt-5">
+          {/* Process Risk Comparison */}
           <div className="rounded-[20px] border border-white/[0.08] bg-[#090f18]/90 p-5 sm:p-6">
             <h2 className="font-[family-name:var(--font-display)] text-base font-semibold text-white">
               Process Risk Comparison
             </h2>
             <p className="mt-1 text-xs text-white/40">
-              Average risk priority number by process step
+              Average risk priority number by process step (process inferred
+              from machine assignment)
             </p>
 
-            <div className="mt-6 space-y-4">
-              {PROCESS_RISK_EXPOSURE.map((p) => {
-                const risk = classifyRisk(p.avgRpn);
-                const s = RISK_STYLES[risk];
-                const widthPct = (p.avgRpn / maxExposure) * 100;
-                return (
-                  <div key={p.process}>
-                    <div className="mb-1.5 flex items-center justify-between">
-                      <span className="text-xs font-medium text-white/70">
-                        {p.process}
-                      </span>
-                      <span
-                        className={`font-[family-name:var(--font-mono)] text-xs font-semibold ${s.text}`}
-                      >
-                        {p.avgRpn}
-                      </span>
+            {processRiskExposure.length === 0 ? (
+              <p className="mt-6 text-xs text-white/40">
+                No PFMEA records available yet.
+              </p>
+            ) : (
+              <div className="mt-6 space-y-4">
+                {processRiskExposure.map((p) => {
+                  const risk = classifyRisk(p.avgRpn);
+                  const s = RISK_STYLES[risk];
+                  const widthPct = maxExposure
+                    ? (p.avgRpn / maxExposure) * 100
+                    : 0;
+                  return (
+                    <div key={p.process}>
+                      <div className="mb-1.5 flex items-center justify-between">
+                        <span className="text-xs font-medium text-white/70">
+                          {p.process}
+                        </span>
+                        <span
+                          className={`font-[family-name:var(--font-mono)] text-xs font-semibold ${s.text}`}
+                        >
+                          {p.avgRpn}
+                        </span>
+                      </div>
+                      <div className="h-2.5 w-full overflow-hidden rounded-full bg-white/[0.05]">
+                        <div
+                          className={`h-full rounded-full ${s.dot} ${s.ring}`}
+                          style={{ width: `${widthPct}%` }}
+                        />
+                      </div>
                     </div>
-                    <div className="h-2.5 w-full overflow-hidden rounded-full bg-white/[0.05]">
-                      <div
-                        className={`h-full rounded-full ${s.dot} ${s.ring}`}
-                        style={{ width: `${widthPct}%` }}
-                      />
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          </div>
-
-          {/* RIGHT: Engineering Risk Insight */}
-          <div className="rounded-[20px] border border-white/[0.08] bg-[#090f18]/90 p-5 sm:p-6">
-            <div className="flex items-center gap-2">
-              <Target className="h-4 w-4 text-rose-300" />
-              <h2 className="font-[family-name:var(--font-display)] text-base font-semibold text-white">
-                Engineering Risk Insight
-              </h2>
-            </div>
-
-            <div className="mt-4 space-y-3.5">
-              <InsightRow label="Process" value="Carton Forming" />
-              <InsightRow
-                label="Failure Mode"
-                value="Incomplete carton erection"
-              />
-              <InsightRow
-                label="Effect"
-                value="Carton collapse during downstream product loading"
-              />
-              <InsightRow
-                label="Likely Cause"
-                value="Vacuum pickup degradation / forming timing deviation"
-              />
-              <InsightRow
-                label="Current Controls"
-                value="Vacuum pressure monitoring + operator inspection"
-              />
-              <InsightRow
-                label="Recommended Action"
-                value="Introduce vacuum threshold interlock and scheduled suction-cup inspection."
-                emphasize
-              />
-            </div>
-
-            <div className="mt-5 flex items-center justify-between rounded-2xl border border-white/[0.08] bg-white/[0.02] p-4">
-              <div className="text-center">
-                <div className="font-[family-name:var(--font-mono)] text-[10px] uppercase tracking-widest text-white/40">
-                  Current
-                </div>
-                <div className="font-[family-name:var(--font-mono)] text-xl font-bold text-rose-300">
-                  320
-                </div>
+                  );
+                })}
               </div>
-              <ArrowRight className="h-4 w-4 text-white/30" />
-              <div className="text-center">
-                <div className="font-[family-name:var(--font-mono)] text-[10px] uppercase tracking-widest text-white/40">
-                  Projected
-                </div>
-                <div className="font-[family-name:var(--font-mono)] text-xl font-bold text-emerald-300">
-                  120
-                </div>
-              </div>
-              <div className="h-8 w-px bg-white/10" />
-              <div className="flex flex-col items-center gap-1 text-center">
-                <TrendingDown className="h-4 w-4 text-emerald-300" />
-                <div className="font-[family-name:var(--font-mono)] text-xs font-semibold text-emerald-300">
-                  -62.5%
-                </div>
-              </div>
-            </div>
+            )}
           </div>
         </div>
 
@@ -1021,11 +664,6 @@ const donutSegments = riskDistribution.map((seg) => {
               onChange={(v) => setProcessFilter(v as typeof processFilter)}
               options={["All Processes", ...PROCESS_STEPS]}
             />
-            <SelectField
-              value={statusFilter}
-              onChange={(v) => setStatusFilter(v as typeof statusFilter)}
-              options={["All Status", ...STATUS_OPTIONS]}
-            />
           </div>
 
           {/* Table */}
@@ -1045,7 +683,6 @@ const donutSegments = riskDistribution.map((seg) => {
                     "RPN",
                     "Risk",
                     "Owner",
-                    "Action Status",
                   ].map((h) => (
                     <th
                       key={h}
@@ -1097,15 +734,12 @@ const donutSegments = riskDistribution.map((seg) => {
                     <td className="whitespace-nowrap px-4 py-3 text-xs text-white/60">
                       {r.owner}
                     </td>
-                    <td className="whitespace-nowrap px-4 py-3">
-                      <StatusBadge status={r.actionStatus} />
-                    </td>
                   </tr>
                 ))}
                 {filtered.length === 0 && (
                   <tr>
                     <td
-                      colSpan={12}
+                      colSpan={11}
                       className="px-4 py-10 text-center text-xs text-white/30"
                     >
                       No PFMEA records match the current filters.
@@ -1146,38 +780,6 @@ const donutSegments = riskDistribution.map((seg) => {
             </div>
 
             <div className="space-y-4 px-6 py-5">
-              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-                <Field label="Process Step">
-                  <select
-                    value={form.process}
-                    onChange={(e) =>
-                      setForm((f) => ({
-                        ...f,
-                        process: e.target.value as ProcessStep,
-                      }))
-                    }
-                    className="w-full rounded-xl border border-white/[0.08] bg-white/[0.03] px-3 py-2.5 text-sm text-white/80 outline-none focus:border-cyan-400/40"
-                  >
-                    {PROCESS_STEPS.map((p) => (
-                      <option key={p} value={p} className="bg-[#0a1120]">
-                        {p}
-                      </option>
-                    ))}
-                  </select>
-                </Field>
-                <Field label="Owner">
-                  <input
-                    type="text"
-                    value={form.owner}
-                    onChange={(e) =>
-                      setForm((f) => ({ ...f, owner: e.target.value }))
-                    }
-                    placeholder="e.g. R. Mehta"
-                    className="w-full rounded-xl border border-white/[0.08] bg-white/[0.03] px-3 py-2.5 text-sm text-white/80 placeholder:text-white/25 outline-none focus:border-cyan-400/40"
-                  />
-                </Field>
-              </div>
-
               <Field label="Failure Mode">
                 <input
                   type="text"
@@ -1190,30 +792,17 @@ const donutSegments = riskDistribution.map((seg) => {
                 />
               </Field>
 
-              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-                <Field label="Effect">
-                  <input
-                    type="text"
-                    value={form.effect}
-                    onChange={(e) =>
-                      setForm((f) => ({ ...f, effect: e.target.value }))
-                    }
-                    placeholder="Downstream impact"
-                    className="w-full rounded-xl border border-white/[0.08] bg-white/[0.03] px-3 py-2.5 text-sm text-white/80 placeholder:text-white/25 outline-none focus:border-cyan-400/40"
-                  />
-                </Field>
-                <Field label="Cause">
-                  <input
-                    type="text"
-                    value={form.cause}
-                    onChange={(e) =>
-                      setForm((f) => ({ ...f, cause: e.target.value }))
-                    }
-                    placeholder="Root cause"
-                    className="w-full rounded-xl border border-white/[0.08] bg-white/[0.03] px-3 py-2.5 text-sm text-white/80 placeholder:text-white/25 outline-none focus:border-cyan-400/40"
-                  />
-                </Field>
-              </div>
+              <Field label="Effect">
+                <input
+                  type="text"
+                  value={form.effect}
+                  onChange={(e) =>
+                    setForm((f) => ({ ...f, effect: e.target.value }))
+                  }
+                  placeholder="Downstream impact"
+                  className="w-full rounded-xl border border-white/[0.08] bg-white/[0.03] px-3 py-2.5 text-sm text-white/80 placeholder:text-white/25 outline-none focus:border-cyan-400/40"
+                />
+              </Field>
 
               <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
                 <RatingField
@@ -1232,21 +821,6 @@ const donutSegments = riskDistribution.map((seg) => {
                   onChange={(v) => setForm((f) => ({ ...f, detection: v }))}
                 />
               </div>
-
-              <Field label="Recommended Action">
-                <textarea
-                  value={form.recommendedAction}
-                  onChange={(e) =>
-                    setForm((f) => ({
-                      ...f,
-                      recommendedAction: e.target.value,
-                    }))
-                  }
-                  rows={2}
-                  placeholder="Proposed mitigation / control"
-                  className="w-full resize-none rounded-xl border border-white/[0.08] bg-white/[0.03] px-3 py-2.5 text-sm text-white/80 placeholder:text-white/25 outline-none focus:border-cyan-400/40"
-                />
-              </Field>
 
               {/* Live RPN preview */}
               <div className="flex items-center justify-between rounded-2xl border border-white/[0.08] bg-white/[0.02] p-4">
@@ -1282,7 +856,7 @@ const donutSegments = riskDistribution.map((seg) => {
               </button>
               <button
                 onClick={handleAddFailureMode}
-                disabled={!form.failureMode.trim() || !form.owner.trim()}
+                disabled={!form.failureMode.trim()}
                 className="inline-flex items-center gap-1.5 rounded-xl border border-cyan-400/30 bg-cyan-500/15 px-4 py-2.5 font-[family-name:var(--font-mono)] text-xs font-semibold uppercase tracking-wider text-cyan-300 transition hover:bg-cyan-500/25 disabled:cursor-not-allowed disabled:opacity-40"
               >
                 <Plus className="h-3.5 w-3.5" />
@@ -1369,29 +943,6 @@ function MiniStat({
       </div>
       <div className="mt-0.5 text-[10px] uppercase tracking-wider text-white/40">
         {label}
-      </div>
-    </div>
-  );
-}
-
-function InsightRow({
-  label,
-  value,
-  emphasize,
-}: {
-  label: string;
-  value: string;
-  emphasize?: boolean;
-}) {
-  return (
-    <div>
-      <div className="font-[family-name:var(--font-mono)] text-[10px] uppercase tracking-widest text-white/35">
-        {label}
-      </div>
-      <div
-        className={`mt-1 text-sm leading-snug ${emphasize ? "text-cyan-200" : "text-white/75"}`}
-      >
-        {value}
       </div>
     </div>
   );

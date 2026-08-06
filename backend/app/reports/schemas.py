@@ -1,11 +1,13 @@
+from typing import Optional
+
 from pydantic import BaseModel
 
 
 class OEESummary(BaseModel):
-    availability: float
-    performance: float
-    quality: float
-    oee: float
+    availability: Optional[float] = None
+    performance: Optional[float] = None
+    quality: Optional[float] = None
+    oee: Optional[float] = None
 
 
 class MaintenanceSummary(BaseModel):

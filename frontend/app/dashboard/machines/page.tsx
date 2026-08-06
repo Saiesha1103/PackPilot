@@ -1,21 +1,17 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import Link from "next/link";
 import {
   Search,
   Factory,
   Thermometer,
   Gauge,
   Clock3,
-  ArrowRight,
   AlertTriangle,
   CheckCircle2,
   XCircle,
-  ChevronRight,
   Radio,
   SlidersHorizontal,
-  Wrench,
   CalendarClock,
 } from "lucide-react";
 
@@ -290,9 +286,14 @@ export default function MachinesPage() {
       <div className="relative">
         {/* header */}
         <div className="mb-8">
-          <div className="mb-3 inline-flex items-center gap-2 rounded-full border border-sky-400/20 bg-sky-400/[0.06] px-3 py-1 text-[11px] uppercase tracking-[0.2em] text-sky-300">
-            <Factory className="h-3 w-3" />
-            Machine Fleet
+          <div className="mb-3 flex flex-wrap items-center gap-2">
+            <div className="inline-flex items-center gap-2 rounded-full border border-sky-400/20 bg-sky-400/[0.06] px-3 py-1 text-[11px] uppercase tracking-[0.2em] text-sky-300">
+              <Factory className="h-3 w-3" />
+              Machine Fleet
+            </div>
+            <div className="inline-flex items-center gap-2 rounded-full border border-amber-400/25 bg-amber-400/[0.1] px-3 py-1 text-[11px] uppercase tracking-[0.2em] text-amber-300">
+              Demo Fleet Data
+            </div>
           </div>
           <h1 className="font-[family-name:var(--font-display)] text-3xl font-semibold tracking-tight text-slate-50 sm:text-4xl">
             Packaging Line Equipment
@@ -371,7 +372,6 @@ export default function MachinesPage() {
         <section className="mb-10 grid grid-cols-1 gap-5 sm:grid-cols-2 xl:grid-cols-3">
           {filteredMachines.map((m) => {
             const meta = statusMeta(m.status);
-            const StatusIcon = meta.icon;
             const isOffline = m.status === "offline";
             return (
               <div
@@ -463,18 +463,6 @@ export default function MachinesPage() {
                     </div>
                   </div>
                 </div>
-
-                {/* footer */}
-                <Link
-                  href={`/dashboard/machines/${m.id.toLowerCase()}`}
-                  className="relative flex items-center justify-between rounded-lg border border-white/[0.06] bg-white/[0.02] px-3 py-2 text-xs text-slate-400 transition-all duration-300 hover:border-sky-300/20 hover:bg-sky-400/[0.06] hover:text-sky-200"
-                >
-                  <span className="flex items-center gap-1.5">
-                    <StatusIcon className={`h-3.5 w-3.5 ${meta.text}`} />
-                    View Details
-                  </span>
-                  <ArrowRight className="h-3.5 w-3.5 transition-transform duration-300 group-hover:translate-x-0.5" />
-                </Link>
               </div>
             );
           })}
@@ -595,14 +583,6 @@ export default function MachinesPage() {
                         {issue.timestamp}
                       </p>
                     </div>
-                    <button
-                      aria-label="Acknowledge issue"
-                      className="flex shrink-0 items-center gap-1 self-center rounded-lg border border-white/[0.07] bg-white/[0.03] px-2.5 py-1.5 text-[11px] text-slate-400 transition-all duration-300 hover:border-sky-300/25 hover:bg-sky-400/[0.08] hover:text-sky-200"
-                    >
-                      <Wrench className="h-3 w-3" />
-                      <span className="hidden sm:inline">Acknowledge</span>
-                      <ChevronRight className="h-3 w-3 transition-transform duration-300 group-hover/issue:translate-x-0.5" />
-                    </button>
                   </div>
                 );
               })}

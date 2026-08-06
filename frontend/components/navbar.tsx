@@ -2,15 +2,9 @@
 
 import { useEffect, useState } from "react";
 import { motion } from "framer-motion";
+import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { Boxes } from "lucide-react";
-
-const NAV_LINKS = [
-  { label: "Platform", href: "#platform" },
-  { label: "Architecture", href: "#architecture" },
-  { label: "Reliability", href: "#reliability" },
-  { label: "Resources", href: "#resources" },
-];
 
 export function Navbar() {
   const [scrolled, setScrolled] = useState(false);
@@ -43,25 +37,12 @@ export function Navbar() {
           </span>
         </a>
 
-        <div className="hidden items-center gap-8 md:flex">
-          {NAV_LINKS.map((link) => (
-            <a
-              key={link.label}
-              href={link.href}
-              className="text-sm text-steel-400 transition-colors hover:text-white"
-            >
-              {link.label}
-            </a>
-          ))}
-        </div>
-
         <div className="flex items-center gap-3">
-          <Button variant="ghost" size="sm" className="hidden sm:inline-flex">
-            Sign in
-          </Button>
-          <Button variant="secondary" size="sm">
-            Request Demo
-          </Button>
+          <Link href="/dashboard">
+            <Button variant="secondary" size="sm">
+              Open Dashboard
+            </Button>
+          </Link>
         </div>
       </nav>
     </motion.header>

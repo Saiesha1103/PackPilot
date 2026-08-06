@@ -12,7 +12,6 @@ import {
   ChevronDown,
   Wrench,
   Zap,
-  Radio,
   Timer,
   ArrowDownRight,
   ArrowUpRight,
@@ -31,19 +30,6 @@ import {
 /* ============================================================
    TYPES
    ============================================================ */
-
-type DayTrend = {
-  day: string;
-  planned: number;
-  unplanned: number;
-  isToday?: boolean;
-};
-
-type CauseItem = {
-  cause: string;
-  minutes: number;
-  events: number;
-};
 
 type LineAvailability = {
   line: string;
@@ -73,49 +59,6 @@ type DowntimeEventView = {
    MOCK DATA
    Later this can be replaced by FastAPI responses
    ============================================================ */
-
-const TREND: DayTrend[] = [
-  { day: "Mon", planned: 20, unplanned: 45 },
-  { day: "Tue", planned: 15, unplanned: 30 },
-  { day: "Wed", planned: 40, unplanned: 20 },
-  { day: "Thu", planned: 10, unplanned: 55 },
-  { day: "Fri", planned: 25, unplanned: 40 },
-  { day: "Sat", planned: 60, unplanned: 15 },
-  {
-    day: "Sun",
-    planned: 73,
-    unplanned: 128,
-    isToday: true,
-  },
-];
-
-const CAUSES: CauseItem[] = [
-  {
-    cause: "Mechanical",
-    minutes: 92,
-    events: 8,
-  },
-  {
-    cause: "Electrical",
-    minutes: 64,
-    events: 6,
-  },
-  {
-    cause: "Sensor",
-    minutes: 48,
-    events: 5,
-  },
-  {
-    cause: "Pneumatic",
-    minutes: 37,
-    events: 4,
-  },
-  {
-    cause: "Process",
-    minutes: 29,
-    events: 3,
-  },
-];
 
 const LINES: LineAvailability[] = [
   {
@@ -602,20 +545,12 @@ export default function DowntimePage() {
                 </p>
 
                 <p className="mt-4 font-[family-name:var(--font-display)] text-[31px] font-semibold tracking-tight text-slate-100">
-                  94.8%
-                </p>
+  --
+</p>
 
-                <div className="mt-2 flex items-center gap-1">
-                  <ArrowUpRight className="h-3.5 w-3.5 text-emerald-300" />
-
-                  <span className="text-[11px] font-medium text-emerald-300">
-                    1.2% vs last shift
-                  </span>
-                </div>
-
-                <p className="mt-1 text-[10px] text-slate-600">
-                  Rolling 24h OEE input
-                </p>
+<p className="mt-2 text-[10px] text-slate-600">
+  Production runtime input unavailable
+</p>
               </div>
 
               <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-emerald-400/20 bg-emerald-400/[0.08] text-emerald-300 shadow-[inset_0_1px_0_rgba(255,255,255,0.06)]">
@@ -643,337 +578,14 @@ export default function DowntimePage() {
                 <p className="mt-2 text-[11px] text-slate-500">Current shift</p>
 
                 <p className="mt-2 font-[family-name:var(--font-mono)] text-[9px] uppercase tracking-[0.1em] text-slate-600">
-                  2 currently active
+                  {downtimeLoading
+                    ? "--"
+                    : `${apiEvents.filter((event) => event.end_time === null).length} currently active`}
                 </p>
               </div>
 
               <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-cyan-400/20 bg-cyan-400/[0.08] text-cyan-300 shadow-[inset_0_1px_0_rgba(255,255,255,0.06)]">
                 <Zap className="h-[19px] w-[19px]" />
-              </div>
-            </div>
-          </div>
-        </section>
-        {/* ====================================================
-            TREND + PARETO
-            ==================================================== */}
-
-        <section className="mb-7 grid gap-4 xl:grid-cols-[1.55fr_1fr]">
-          {/* DOWNTIME TREND */}
-          <div className="relative overflow-hidden rounded-[20px] border border-white/[0.08] bg-[#090f18]/85 p-5 shadow-[0_20px_50px_-32px_rgba(0,0,0,0.95),inset_0_1px_0_rgba(255,255,255,0.05)] sm:p-6">
-            <div className="pointer-events-none absolute -right-24 top-0 h-56 w-56 rounded-full bg-cyan-400/[0.035] blur-[90px]" />
-
-            <div className="relative mb-6 flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
-              <div>
-                <p className="font-[family-name:var(--font-mono)] text-[9px] uppercase tracking-[0.18em] text-slate-500">
-                  Trend · 7 Days
-                </p>
-
-                <h2 className="mt-1.5 font-[family-name:var(--font-display)] text-lg font-semibold tracking-tight text-slate-100">
-                  Downtime Trend — Last 7 Days
-                </h2>
-
-                <p className="mt-1 text-[11px] text-slate-600">
-                  Planned and unplanned stoppage minutes
-                </p>
-              </div>
-
-              <div className="flex flex-wrap items-center gap-4 text-[10px] text-slate-400">
-                <div className="flex items-center gap-1.5">
-                  <span className="h-2 w-2 rounded-full bg-amber-400" />
-                  Planned
-                </div>
-
-                <div className="flex items-center gap-1.5">
-                  <span className="h-2 w-2 rounded-full bg-rose-400" />
-                  Unplanned
-                </div>
-
-                <div className="flex items-center gap-1.5">
-                  <span className="h-px w-4 border-t border-dashed border-cyan-400/70" />
-                  Target
-                </div>
-              </div>
-            </div>
-
-            {/* CHART */}
-            <div className="relative h-[300px]">
-              {/* Y axis labels */}
-              <div className="pointer-events-none absolute inset-y-0 left-0 flex w-8 flex-col justify-between pb-7 pt-1 font-[family-name:var(--font-mono)] text-[9px] text-slate-600">
-                <span>220</span>
-                <span>165</span>
-                <span>110</span>
-                <span>55</span>
-                <span>0</span>
-              </div>
-
-              <div className="absolute bottom-7 left-10 right-0 top-1">
-                {/* horizontal grid */}
-                {[0, 25, 50, 75, 100].map((position) => (
-                  <div
-                    key={position}
-                    className="absolute left-0 right-0 border-t border-white/[0.055]"
-                    style={{ bottom: `${position}%` }}
-                  />
-                ))}
-
-                {/* target line */}
-                <div
-                  className="absolute left-0 right-0 z-10 border-t border-dashed border-cyan-400/55"
-                  style={{ bottom: `${(90 / 220) * 100}%` }}
-                >
-                  <span className="absolute right-0 -top-5 rounded bg-cyan-400/[0.07] px-1.5 py-0.5 font-[family-name:var(--font-mono)] text-[8px] text-cyan-300">
-                    target 90m
-                  </span>
-                </div>
-
-                {/* bars */}
-                <div className="absolute inset-0 flex items-end justify-around gap-2 px-1 sm:px-4">
-                  {TREND.map((item) => {
-                    const total = item.planned + item.unplanned;
-                    const plannedHeight = (item.planned / 220) * 100;
-                    const unplannedHeight = (item.unplanned / 220) * 100;
-
-                    return (
-                      <div
-                        key={item.day}
-                        className="group relative flex h-full flex-1 items-end justify-center"
-                      >
-                        {item.isToday && (
-                          <div className="pointer-events-none absolute inset-y-0 left-1/2 w-14 -translate-x-1/2 rounded-xl bg-cyan-400/[0.025] blur-[1px]" />
-                        )}
-
-                        <div className="relative flex h-full w-full max-w-[42px] flex-col justify-end">
-                          {/* total label */}
-                          <span
-                            className={`absolute left-1/2 z-20 -translate-x-1/2 whitespace-nowrap font-[family-name:var(--font-mono)] text-[9px] font-semibold ${
-                              item.isToday ? "text-cyan-300" : "text-slate-400"
-                            }`}
-                            style={{
-                              bottom: `calc(${Math.min(
-                                (total / 220) * 100,
-                                92,
-                              )}% + 7px)`,
-                            }}
-                          >
-                            {total}m
-                          </span>
-
-                          {/* stacked bar */}
-                          <div
-                            className={`relative w-full overflow-hidden rounded-t-[5px] border-x border-t transition-all duration-300 group-hover:brightness-110 ${
-                              item.isToday
-                                ? "border-cyan-300/20 shadow-[0_0_22px_-7px_rgba(34,211,238,0.35)]"
-                                : "border-white/[0.08]"
-                            }`}
-                            style={{
-                              height: `${(total / 220) * 100}%`,
-                            }}
-                          >
-                            {/* unplanned */}
-                            <div
-                              className="absolute left-0 right-0 top-0 bg-gradient-to-b from-rose-400 to-rose-600"
-                              style={{
-                                height: `${
-                                  (unplannedHeight /
-                                    (plannedHeight + unplannedHeight)) *
-                                  100
-                                }%`,
-                              }}
-                            >
-                              <div className="absolute inset-x-0 top-0 h-px bg-white/20" />
-                            </div>
-
-                            {/* planned */}
-                            <div
-                              className="absolute bottom-0 left-0 right-0 bg-gradient-to-b from-amber-400 to-amber-600"
-                              style={{
-                                height: `${
-                                  (plannedHeight /
-                                    (plannedHeight + unplannedHeight)) *
-                                  100
-                                }%`,
-                              }}
-                            >
-                              <div className="absolute inset-x-0 top-0 h-px bg-white/15" />
-                            </div>
-                          </div>
-
-                          {/* hover tooltip */}
-                          <div className="pointer-events-none absolute bottom-[calc(100%+10px)] left-1/2 z-40 hidden w-32 -translate-x-1/2 rounded-lg border border-white/[0.08] bg-[#0b111b]/95 p-2 shadow-xl backdrop-blur-xl group-hover:block">
-                            <p className="text-[10px] font-semibold text-slate-200">
-                              {item.day}
-                            </p>
-
-                            <div className="mt-1.5 space-y-1 font-[family-name:var(--font-mono)] text-[8px]">
-                              <div className="flex justify-between text-amber-300">
-                                <span>Planned</span>
-                                <span>{item.planned}m</span>
-                              </div>
-
-                              <div className="flex justify-between text-rose-300">
-                                <span>Unplanned</span>
-                                <span>{item.unplanned}m</span>
-                              </div>
-
-                              <div className="border-t border-white/[0.06] pt-1 text-slate-300">
-                                <div className="flex justify-between">
-                                  <span>Total</span>
-                                  <span>{total}m</span>
-                                </div>
-                              </div>
-                            </div>
-                          </div>
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
-              </div>
-
-              {/* X axis */}
-              <div className="absolute bottom-0 left-10 right-0 flex justify-around px-1 sm:px-4">
-                {TREND.map((item) => (
-                  <span
-                    key={item.day}
-                    className={`flex-1 text-center font-[family-name:var(--font-mono)] text-[9px] ${
-                      item.isToday
-                        ? "font-semibold text-cyan-300"
-                        : "text-slate-500"
-                    }`}
-                  >
-                    {item.day}
-                  </span>
-                ))}
-              </div>
-            </div>
-          </div>
-
-          {/* ==================================================
-              DOWNTIME BY CAUSE
-              ================================================== */}
-
-          <div className="relative overflow-hidden rounded-[20px] border border-white/[0.08] bg-[#090f18]/85 p-5 shadow-[0_20px_50px_-32px_rgba(0,0,0,0.95),inset_0_1px_0_rgba(255,255,255,0.05)] sm:p-6">
-            <div className="pointer-events-none absolute -right-20 -top-20 h-48 w-48 rounded-full bg-rose-400/[0.035] blur-[90px]" />
-
-            <div className="relative">
-              <p className="font-[family-name:var(--font-mono)] text-[9px] uppercase tracking-[0.18em] text-slate-500">
-                Root Cause · Pareto
-              </p>
-
-              <h2 className="mt-1.5 font-[family-name:var(--font-display)] text-lg font-semibold tracking-tight text-slate-100">
-                Downtime by Cause
-              </h2>
-
-              <p className="mt-1 text-[11px] text-slate-600">
-                Ranked by total stoppage minutes
-              </p>
-            </div>
-
-            <div className="relative mt-6 space-y-5">
-              {CAUSES.map((item, index) => {
-                const maxMinutes = CAUSES[0].minutes;
-
-                const totalMinutes = CAUSES.reduce(
-                  (sum, cause) => sum + cause.minutes,
-                  0,
-                );
-
-                const cumulativeMinutes = CAUSES.slice(0, index + 1).reduce(
-                  (sum, cause) => sum + cause.minutes,
-                  0,
-                );
-
-                const cumulativePercentage =
-                  (cumulativeMinutes / totalMinutes) * 100;
-
-                const width = (item.minutes / maxMinutes) * 100;
-
-                const barClass =
-                  index === 0
-                    ? "from-rose-500 to-rose-400"
-                    : index === 1
-                      ? "from-amber-500 to-amber-400"
-                      : "from-cyan-500 to-cyan-400";
-
-                const iconClass =
-                  index === 0
-                    ? "text-rose-300"
-                    : index === 1
-                      ? "text-amber-300"
-                      : "text-cyan-300";
-
-                return (
-                  <div key={item.cause}>
-                    <div className="mb-2 flex items-center justify-between gap-3">
-                      <div className="flex min-w-0 items-center gap-2">
-                        {index === 0 ? (
-                          <Wrench
-                            className={`h-3.5 w-3.5 shrink-0 ${iconClass}`}
-                          />
-                        ) : index === 1 ? (
-                          <Zap
-                            className={`h-3.5 w-3.5 shrink-0 ${iconClass}`}
-                          />
-                        ) : index === 2 ? (
-                          <Radio
-                            className={`h-3.5 w-3.5 shrink-0 ${iconClass}`}
-                          />
-                        ) : (
-                          <Activity
-                            className={`h-3.5 w-3.5 shrink-0 ${iconClass}`}
-                          />
-                        )}
-
-                        <span className="truncate text-xs font-semibold text-slate-300">
-                          {item.cause}
-                        </span>
-                      </div>
-
-                      <span className="shrink-0 font-[family-name:var(--font-mono)] text-[9px] text-slate-400">
-                        {item.minutes} min · {item.events} events
-                      </span>
-                    </div>
-
-                    <div className="relative h-2.5 overflow-hidden rounded-full border border-white/[0.055] bg-white/[0.035]">
-                      <div
-                        className={`absolute inset-y-0 left-0 rounded-full bg-gradient-to-r ${barClass} shadow-[0_0_12px_-4px_currentColor] transition-all duration-500`}
-                        style={{
-                          width: `${width}%`,
-                        }}
-                      >
-                        <div className="absolute inset-x-0 top-0 h-px bg-white/20" />
-                      </div>
-                    </div>
-
-                    <div className="mt-1.5 flex justify-end">
-                      <span className="font-[family-name:var(--font-mono)] text-[8px] text-slate-600">
-                        cumulative {cumulativePercentage.toFixed(1)}%
-                      </span>
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-
-            {/* insight box */}
-            <div className="relative mt-6 overflow-hidden rounded-xl border border-rose-400/10 bg-rose-400/[0.035] p-3.5">
-              <div className="absolute inset-y-0 left-0 w-[2px] bg-gradient-to-b from-rose-400 to-transparent" />
-
-              <div className="flex items-start gap-2.5">
-                <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-rose-300" />
-
-                <div>
-                  <p className="text-[11px] font-medium text-slate-300">
-                    Mechanical losses are the primary contributor
-                  </p>
-
-                  <p className="mt-1 text-[10px] leading-5 text-slate-600">
-                    Mechanical failures account for{" "}
-                    <span className="font-medium text-rose-300">34.1%</span> of
-                    tracked stoppage minutes. Prioritize recurring bearing and
-                    drive-train faults.
-                  </p>
-                </div>
               </div>
             </div>
           </div>
@@ -1614,7 +1226,7 @@ export default function DowntimePage() {
 
           <div className="flex flex-wrap items-center gap-x-4 gap-y-1 font-[family-name:var(--font-mono)] text-[8px] uppercase tracking-[0.1em] text-slate-700">
             <span>Polling 2s</span>
-            <span>5 Lines Connected</span>
+            <span>1 Line Connected</span>
             <span>PackPilot Downtime Engine</span>
           </div>
         </div>
