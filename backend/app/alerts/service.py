@@ -10,7 +10,6 @@ from app.models.alert import Alert
 # ---------------------------------------------------------
 
 TEMPERATURE_HIGH = 80.0       # °C
-VIBRATION_HIGH = 7.0          # mm/s
 HUMIDITY_HIGH = 75.0          # %
 OEE_LOW = 60.0                # %
 
@@ -68,12 +67,12 @@ def evaluate_sensor_reading(
             "Critical",
         )
 
-    if sensor_type == "vibration" and value > VIBRATION_HIGH:
+    if sensor_type == "vibration" and value == 1:
         return create_alert(
             db,
             machine_id,
             "High Vibration",
-            f"Vibration reached {value:.1f} mm/s; threshold is {VIBRATION_HIGH:.1f} mm/s.",
+            "Vibration detected by machine-mounted sensor; level exceeds normal baseline.",
             "High",
         )
 

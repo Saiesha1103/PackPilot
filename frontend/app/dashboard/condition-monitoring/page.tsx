@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { API_BASE_URL } from "@/lib/api";
+import { API_BASE_URL, getLatestSensorReading, type SensorReading } from "@/lib/api";
 import {
   Activity,
   HeartPulse,
@@ -51,6 +51,7 @@ function statusColor(status: string) {
 export default function ConditionMonitoringPage() {
   const [machines, setMachines] = useState<MachineHealth[]>([]);
   const [trend, setTrend] = useState<TrendPoint[]>([]);
+  const [vibration, setVibration] = useState<SensorReading | null>(null);
   const [loading, setLoading] = useState(true);
 
   async function fetchMachineHealth() {
@@ -73,12 +74,19 @@ export default function ConditionMonitoringPage() {
     setTrend(data);
   }
 
+  async function fetchVibration() {
+    const reading = await getLatestSensorReading(2);
+
+    setVibration(reading);
+  }
+
   useEffect(() => {
     async function load() {
       try {
         await Promise.all([
           fetchMachineHealth(),
           fetchTrend(),
+          fetchVibration(),
         ]);
       } finally {
         setLoading(false);
@@ -119,6 +127,17 @@ export default function ConditionMonitoringPage() {
     [machines]
   );
 
+  // Bars are scaled relative to the min/max actually present in the
+  // fetched trend window, not a fixed assumed range — so the chart
+  // reflects the real spread of returned temperature values.
+  const trendRange = useMemo(() => {
+    if (trend.length === 0) return { min: 0, max: 0 };
+
+    const values = trend.map((p) => p.value);
+
+    return { min: Math.min(...values), max: Math.max(...values) };
+  }, [trend]);
+
   const sensorCards: SensorCard[] = [
     {
       title: "Temperature",
@@ -131,8 +150,16 @@ export default function ConditionMonitoringPage() {
     },
     {
       title: "Vibration",
-      value: "Normal",
-      status: "Healthy",
+      value: vibration
+        ? vibration.value === 1
+          ? "Detected"
+          : "Normal"
+        : "--",
+      status: vibration
+        ? vibration.value === 1
+          ? "Elevated"
+          : "Healthy"
+        : "Reporting",
       icon: Waves,
     },
     {
@@ -313,7 +340,7 @@ export default function ConditionMonitoringPage() {
                 </p>
 
                 <h2 className="mt-2 text-xl font-semibold text-slate-100">
-                  Bearing Temperature
+                  Machine Temperature Trend
                 </h2>
 
               </div>
@@ -344,10 +371,14 @@ export default function ConditionMonitoringPage() {
                       <div
                         className="w-full rounded-t-xl bg-gradient-to-t from-cyan-500 to-sky-300 transition-all duration-500"
                         style={{
-                          height: `${Math.max(
-                            (point.value / 100) * 250,
-                            8
-                          )}px`,
+                          height: `${
+                            trendRange.max > trendRange.min
+                              ? 8 +
+                                ((point.value - trendRange.min) /
+                                  (trendRange.max - trendRange.min)) *
+                                  242
+                              : 125
+                          }px`,
                         }}
                       />
 
@@ -520,7 +551,15 @@ export default function ConditionMonitoringPage() {
                     <Icon className="h-6 w-6 text-cyan-300" />
                   </div>
 
-                  <span className="rounded-full border border-emerald-400/15 bg-emerald-400/10 px-3 py-1 text-[10px] font-medium uppercase tracking-wider text-emerald-300">
+                  <span
+                    className={`rounded-full border px-3 py-1 text-[10px] font-medium uppercase tracking-wider ${
+                      sensor.status === "Elevated"
+                        ? "border-amber-400/15 bg-amber-400/10 text-amber-300"
+                        : sensor.status === "Reporting"
+                        ? "border-white/[0.1] bg-white/[0.05] text-slate-400"
+                        : "border-emerald-400/15 bg-emerald-400/10 text-emerald-300"
+                    }`}
+                  >
                     {sensor.status}
                   </span>
 

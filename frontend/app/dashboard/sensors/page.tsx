@@ -57,7 +57,7 @@ const typeIcon: Record<SensorType, typeof Thermometer> = {
 function formatReading(type: SensorType, reading: SensorReading | null): string {
   if (!reading) return "--";
   if (type === "temperature") return `${reading.value.toFixed(1)} °C`;
-  if (type === "vibration") return `${reading.value.toFixed(3)} g`;
+  if (type === "vibration") return reading.value === 1 ? "Detected" : "Not Detected";
   return reading.value === 1 ? "Object Detected" : "Clear";
 }
 
@@ -267,9 +267,9 @@ export default function SensorsPage() {
       if (def.type === "temperature" && reading) {
         status = reading.value > TEMPERATURE_HIGH_C ? "critical" : "healthy";
       }
-      // Vibration: numeric telemetry, but no approved backend threshold exists
-      // for this sensor — status stays "reporting" rather than a guessed one.
-      // IR: binary detection state, not a health condition — "reporting" too.
+      // Vibration and IR are both binary detection states, not measured
+      // magnitudes — no health/warning/critical classification applies,
+      // so status stays "reporting" rather than a guessed one.
 
       return { def, reading, values, status: status as SensorStatus };
     });

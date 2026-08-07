@@ -127,15 +127,6 @@ const INITIAL_THRESHOLDS: ThresholdPair[] = [
     direction: "above",
   },
   {
-    id: "motor-vibration",
-    label: "Motor Vibration",
-    description: "RMS vibration velocity on drive motors",
-    unit: "g RMS",
-    warning: 0.06,
-    critical: 0.08,
-    direction: "above",
-  },
-  {
     id: "line-oee",
     label: "Line OEE",
     description: "Overall equipment effectiveness floor",
