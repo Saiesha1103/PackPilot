@@ -61,14 +61,13 @@ def calculate_machine_health(
         if "temperature" in sensor_type and value > 80:
             score -= 20
 
-        elif "vibration" in sensor_type and value > 7:
+        elif "vibration" in sensor_type and value == 1:
             score -= 20
 
-        elif (
-            "humidity" in sensor_type
-            or "ir" in sensor_type
-            or "proximity" in sensor_type
-        ) and value > 75:
+        elif ("ir" in sensor_type or "proximity" in sensor_type) and value == 1:
+            score -= 10
+
+        elif "humidity" in sensor_type and value > 75:
             score -= 10
 
     if machine.status.lower() == "stopped":
