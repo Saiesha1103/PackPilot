@@ -4,14 +4,12 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
   LayoutDashboard,
-  Factory,
   Radio,
   AlertTriangle,
   TimerReset,
   Wrench,
   FileBarChart2,
   ShieldCheck,
-  Settings,
   Repeat,
   Activity,
   ClipboardCheck,
@@ -20,8 +18,6 @@ import {
 
 const navItems = [
   { label: "Dashboard", href: "/dashboard", icon: LayoutDashboard },
-
-  { label: "Machines", href: "/dashboard/machines", icon: Factory },
 
   { label: "Sensors", href: "/dashboard/sensors", icon: Radio },
 
@@ -48,8 +44,6 @@ const navItems = [
     icon: Repeat,
   },
   { label: "Reports", href: "/dashboard/reports", icon: FileBarChart2 },
-
-  { label: "Settings", href: "/dashboard/settings", icon: Settings },
 ];
 interface SidebarProps {
   isOpen: boolean;
